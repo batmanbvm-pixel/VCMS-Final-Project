@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical OCR Analyzer - Test Page</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+        
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .file-info {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e8f5e9;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .file-info.show {
+            display: block;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+            width: 100%;
+            margin-top: 20px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .credentials {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .credentials input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .status.show {
+            display: block;
+        }
+        
+        .status.loading {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .result {
+            margin-top: 20px;
+        }
+        
+        .result-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .result-section h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        pre {
+            background: #263238;
+            color: #aed581;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .medicine-card {
+            background: #e3f2fd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+        
+        .lab-result-card {
+            background: #f3e5f5;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 5px;
+        }
+        
+        .badge.success {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+        
+        .badge.danger {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+        
+        .badge.warning {
+            background: #fff9c4;
+            color: #f57f17;
+        }
+        
+        .icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧠 Medical Document OCR Analyzer</h1>
+            <p>Test page for analyzing medical documents (prescriptions, lab reports, etc.)</p>
+        </div>
+        
+        <!-- Login Card -->
+        <div class="card">
+            <h2>🔐 Step 1: Login</h2>
+            <div class="credentials">
+                <input type="email" id="email" placeholder="Email" value="patient@test.com">
+                <input type="password" id="password" placeholder="Password" value="password123">
+                <button onclick="login()">Login</button>
+            </div>
+            <div id="loginStatus" class="status"></div>
+        </div>
+        
+        <!-- Upload Card -->
+        <div class="card">
+            <h2>📤 Step 2: Upload Medical Document</h2>
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <div class="icon">📄</div>
+                <h3>Click to upload or drag & drop</h3>
+                <p>JPG, PNG, or PDF (max 10MB)</p>
+                <p style="margin-top: 10px; color: #666; font-size: 14px;">
+                    Supports: Prescriptions, Lab Reports, Discharge Summaries, Radiology Reports
+                </p>
+            </div>
+            <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.pdf" onchange="handleFileSelect(event)">
+            
+            <div id="fileInfo" class="file-info">
+                <strong>Selected File:</strong>
+                <p id="fileName"></p>
+                <p id="fileSize"></p>
+            </div>
+            
+            <button id="analyzeBtn" onclick="analyzeDocument()" disabled>🧠 Analyze Document</button>
+            
+            <div id="analyzeStatus" class="status"></div>
+        </div>
+        
+        <!-- Results Card -->
+        <div class="card" id="resultsCard" style="display: none;">
+            <h2>📊 Analysis Results</h2>
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = null;
+        let selectedFile = null;
+        const API_BASE = 'http://localhost:5000/api';
+        
+        // Drag and drop handlers
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        });
+        
+        // Login function
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const statusDiv = document.getElementById('loginStatus');
+            
+            statusDiv.className = 'status loading show';
+            statusDiv.innerHTML = '⏳ Logging in...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.token) {
+                    authToken = data.token;
+                    statusDiv.className = 'status success show';
+                    statusDiv.innerHTML = '✅ Login successful! You can now upload a document.';
+                } else {
+                    throw new Error(data.message || 'Login failed');
+                }
+            } catch (error) {
+                statusDiv.className = 'status error show';
+                statusDiv.innerHTML = `❌ Login failed: ${error.message}`;
+                authToken = null;
+            }
+        }
+        
+        // File selection handler
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+        
+        function handleFile(file) {
+            // Validate file type
+            const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('Please upload JPG, PNG, or PDF files only');
+                return;
+            }
+            
+            // Validate file size (10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                alert('File size must be less than 10MB');
+                return;
+            }
+            
+            selectedFile = file;
+            
+            // Show file info
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+            document.getElementById('fileInfo').classList.add('show');
+            
+            // Enable analyze button if logged in
+            if (authToken) {
+                document.getElementById('analyzeBtn').disabled = false;
+            }
+        }
+        
+        // Analyze document
+        async function analyzeDocument() {
+            if (!authToken) {
+                alert('Please login first');
+                return;
+            }
+            
+            if (!selectedFile) {
+                alert('Please select a file first');
+                return;
+            }
+            
+            const statusDiv = document.getElementById('analyzeStatus');
+            const resultsCard = document.getElementById('resultsCard');
+            const resultsDiv = document.getElementById('results');
+            
+            statusDiv.className = 'status loading show';
+            statusDiv.innerHTML = '⏳ Analyzing document... This may take 5-10 seconds.';
+            
+            document.getElementById('analyzeBtn').disabled = true;
+            resultsCard.style.display = 'none';
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                
+                const response = await fetch(`${API_BASE}/ai/analyze-medical-document`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                // Display results
+                displayResults(result);
+                
+                if (result.status === 'success') {
+                    statusDiv.className = 'status success show';
+                    statusDiv.innerHTML = '✅ Analysis completed successfully!';
+                } else if (result.status === 'ocr_failed') {
+                    statusDiv.className = 'status error show';
+                    statusDiv.innerHTML = `❌ ${result.message}`;
+                } else if (result.status === 'non_medical') {
+                    statusDiv.className = 'status error show';
+                    statusDiv.innerHTML = `⚠️ ${result.message}`;
+                }
+                
+                resultsCard.style.display = 'block';
+                
+            } catch (error) {
+                statusDiv.className = 'status error show';
+                statusDiv.innerHTML = `❌ Error: ${error.message}`;
+            } finally {
+                document.getElementById('analyzeBtn').disabled = false;
+            }
+        }
+        
+        // Display results
+        function displayResults(result) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (result.status === 'success') {
+                let html = '';
+                
+                // Overview
+                if (result.overview) {
+                    html += `
+                        <div class="result-section">
+                            <h3>📋 Overview</h3>
+                            <p><strong>Hospital/Lab:</strong> ${result.overview.hospital_or_lab}</p>
+                            <p><strong>Doctor:</strong> ${result.overview.doctor_name}</p>
+                            <p><strong>Patient:</strong> ${result.overview.patient_name}</p>
+                            <p><strong>Age:</strong> ${result.overview.patient_age}</p>
+                            <p><strong>Date:</strong> ${result.overview.date}</p>
+                            <p><strong>Diagnosis:</strong> ${result.overview.diagnosis}</p>
+                        </div>
+                    `;
+                }
+                
+                // Summary
+                if (result.summary && result.summary.overview_points) {
+                    html += `
+                        <div class="result-section">
+                            <h3>✨ Quick Summary</h3>
+                            <ul style="list-style: none; padding: 0;">
+                                ${result.summary.overview_points.map(point => `<li style="margin: 8px 0;">${point}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+                
+                // Medicines
+                if (result.medicines && result.medicines.length > 0) {
+                    html += `<div class="result-section"><h3>💊 Medications (${result.medicines.length})</h3>`;
+                    result.medicines.forEach(med => {
+                        html += `
+                            <div class="medicine-card">
+                                <h4>${med.name}</h4>
+                                ${med.generic_name !== 'Not available' ? `<p><em>Generic: ${med.generic_name}</em></p>` : ''}
+                                <p>${med.what_it_does}</p>
+                                <p><strong>Dosage:</strong> ${med.dosage} | <strong>Frequency:</strong> ${med.frequency}</p>
+                                <p><strong>Duration:</strong> ${med.duration}</p>
+                                <p><strong>Take with:</strong> ${med.take_with}</p>
+                                ${med.timing ? `<p><strong>Timing:</strong><br>${med.timing.join('<br>')}</p>` : ''}
+                                ${med.important_tip ? `<p style="background: #fff9c4; padding: 8px; border-radius: 4px; margin-top: 10px;">${med.important_tip}</p>` : ''}
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                }
+                
+                // Lab Results
+                if (result.lab_results && result.lab_results.length > 0) {
+                    html += `<div class="result-section"><h3>🧪 Lab Results (${result.lab_results.length})</h3>`;
+                    result.lab_results.forEach(test => {
+                        html += `
+                            <div class="lab-result-card">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <h4>${test.test_name}</h4>
+                                    <span class="badge ${test.status === 'NORMAL' ? 'success' : 'danger'}">${test.status_emoji} ${test.status}</span>
+                                </div>
+                                <p><strong>Your Value:</strong> ${test.your_value} | <strong>Normal Range:</strong> ${test.normal_range}</p>
+                                ${test.what_it_means ? `<p><strong>What it means:</strong><br>${test.what_it_means.join('<br>')}</p>` : ''}
+                                ${test.what_to_do ? `<p><strong>What to do:</strong><br>${test.what_to_do.join('<br>')}</p>` : ''}
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                }
+                
+                // Alerts
+                if (result.alerts && result.alerts.length > 0) {
+                    html += `<div class="result-section"><h3>⚠️ Important Alerts</h3>`;
+                    result.alerts.forEach(alert => {
+                        html += `
+                            <div class="badge ${alert.level === 'CRITICAL' ? 'danger' : alert.level === 'WARNING' ? 'warning' : 'success'}" style="display: block; margin: 10px 0; padding: 10px;">
+                                <strong>${alert.emoji} ${alert.title}</strong><br>
+                                ${alert.description}<br>
+                                <em>${alert.action}</em>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                }
+                
+                // Full JSON
+                html += `
+                    <div class="result-section">
+                        <h3>📝 Complete JSON Response</h3>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    </div>
+                `;
+                
+                resultsDiv.innerHTML = html;
+            } else {
+                // Error or non-success status
+                resultsDiv.innerHTML = `
+                    <div class="result-section">
+                        <h3>Response</h3>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

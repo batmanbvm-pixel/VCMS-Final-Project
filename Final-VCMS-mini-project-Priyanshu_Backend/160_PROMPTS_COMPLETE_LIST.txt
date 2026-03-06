@@ -1,0 +1,429 @@
+1. BUG FIX / ERROR FIX - MediConnect Virtual Healthcare About Contact 3 PP Prescription Medical Prescription Details Back Print Acute Upper Respiratory Tract Infection (URTI) Issued: 3/3/2026 issued Patient preetp42 patel preet12@gmail.com Doctor Dr. rudra p General Medicine
+
+2. BUG FIX / ERROR FIX - on server.js [nodemon] 3.1.11 [nodemon] to restart at any time, enter `rs` [nodemon] watching path(s): *.* [nodemon] watching extensions: js,mjs,cjs,json [nodemon] starting `node server.js` C:\Users\yptl0\Downloads\Final-VCMS-mini-project-Priyanshu_Backend\Final-VCMS-mini-project-Priyanshu_Backend\backend\server\routes\aiRoutes.js:1111 response.medications.push({ ^^^^^^ SyntaxError: Unexpected identifier 'ations'
+
+3. FEATURE / ENHANCEMENT - issue in vedio also when i write prescription all pages must be open on pop up how can go in nedd page in agan back to vedio page which intrup the vdio and audio all
+
+4. UI / STYLING CHANGE - Book Appointment Scheduling with Dr. rudra p RU Dr. rudra p General Medicine VADODARA,CHHANI, Vadodara, Gujarat ■1000 Select Date March 15th, 2026 Select Time why this pop looke so glowiii pls fix it
+
+5. UI / STYLING CHANGE - first ppobrlm why in vedio both camera not showing same not staring camera bugs in cameara fix it why there is gap of prescription icon
+
+6. BUG FIX / ERROR FIX - in chat bot i complte that appoinment nd book from chat bot but still say slot is alredy booked still say from doctres card
+
+7. UI / STYLING CHANGE - first delted lovalble icon in inspect show which catch in viva all must be our mediconeect symbol in all proejct
+
+8. FEATURE / ENHANCEMENT - why when pateint call end complete appoinment only show in docotre pateint left on camera section not complete completion can only done by doctre fic x it
+
+9. UI / STYLING CHANGE - in all pages chatbot booking icon show also in vedio bigg est problem is same camera somtimes caemra stra sometimes no
+
+10. FEATURE / ENHANCEMENT - in docotre dasbord all this pages Appointments 0 Active appointments (pending, today & upcoming) Open Appointments Patient Feedback 4.5 ★ 2 total reviews
+
+11. UI / STYLING CHANGE - chatbot icon in docotre dahbord in vedio page fix it 2)Waiting for patient... Patient will join the call shortly
+
+12. UI / STYLING CHANGE - first in all pages Appointments 0 Active appointments (pending, today & upcoming) Open Appointments Patient Feedback 4.5 ★ 2 total reviews
+
+13. UI / STYLING CHANGE - in apteint appoinment card completd shome show rate opti oon somenot why all must be show reate depsite prescription genreted
+
+14. BUG FIX / ERROR FIX - Unexpected Application Error! Cannot access 'viewFilter' before initialization ReferenceError: Cannot access 'viewFilter' before initialization
+
+15. UI / STYLING CHANGE - i said on dashbord appoinment prescription card and in that complete still not show rate option
+
+16. UI / STYLING CHANGE - thois part of pateint dashbord Find Doctors Search by symptom, name, specialization or location
+
+17. UI / STYLING CHANGE - Quick select by symptom ■ Fever ■ Headache ■ Chest Pain ■ Skin Rash ■ Joint Pain ■ Back Pain ■ Stomach Pain ■ Acne ■ Hair Loss
+
+18. UI / STYLING CHANGE - no nned to use this blue now looks all dabord like monot om all have same c;lorus make symtomes card courful and fetuful eye catchoing
+
+19. UI / STYLING CHANGE - still not look like morden extraordionay simple not eye catch
+
+20. UI / STYLING CHANGE - you make to big card colur shoulbe eyecatching not like light
+
+21. FEATURE / ENHANCEMENT - but this clours not match our colur palete fix it
+
+22. UI / STYLING CHANGE - now loookes good but make somthing now so that sytmoes lookes cleary and also relted pateint
+
+23. UI / STYLING CHANGE - now llokes good but make little bit light it is to dark
+
+24. UI / STYLING CHANGE - now but not metch our paltee colour
+
+25. UI / STYLING CHANGE - i think dark lookes good
+
+26. UI / STYLING CHANGE - make it like early dark colurs sytomes card
+
+27. UI / STYLING CHANGE - now change all sytomes card of of this preojct to this colurs i thin in giuest page in all three user dashbord
+
+28. FEATURE / ENHANCEMENT - not make big i not like that
+
+29. UI / STYLING CHANGE - but symbos not looking good not esily visible
+
+30. UI / STYLING CHANGE - not make card size big plss
+
+31. FEATURE / ENHANCEMENT - on now final make butful change lokes like wowowww
+
+32. FEATURE / ENHANCEMENT - not make rgb lokes like rgb bulb
+
+33. UI / STYLING CHANGE - i like guest page in patient dashbord for sytomes card , margin inc like uest so that card becomes small
+
+34. BUG FIX / ERROR FIX - client:702 [vite] Internal Server Error × Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+
+35. BUG FIX / ERROR FIX - Expected ',', got '{'
+
+36. BUG FIX / ERROR FIX - Expected '</', got '{'
+
+37. BUG FIX / ERROR FIX - GET http://localhost:8080/src/pages/PatientPrescriptions.tsx?t=1772534513767 net::ERR_ABORTED 500 (Internal Server Error)
+
+38. BUG FIX / ERROR FIX - PatientAIAnalyzer.tsx:1 Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+
+39. BUG FIX / ERROR FIX - Expected '</', got '{'
+
+40. FEATURE / ENHANCEMENT - in medical histry past aooinment is not needed
+
+41. UI / STYLING CHANGE - in medical history add option should be on screen also not in header like beside of each card o r somthing give + icon in round
+
+42. UI / STYLING CHANGE - i not see any + button on ly see chatbot icon
+
+43. UI / STYLING CHANGE - in Manage Users View and manage all registered users · Pending approvals admin panel why have scroll button i not like that fix it
+
+44. FEATURE / ENHANCEMENT - still has hrizontal scroll i not like it
+
+45. UI / STYLING CHANGE - now check all proejct an dfix this issue hrizontal scroll is not looke good remove it
+
+46. BUG FIX / ERROR FIX - App.tsx:35 GET http://localhost:8080/src/pages/AdminDashboard.tsx?t=1772535884177 500 (Internal Server Error)
+
+47. BUG FIX / ERROR FIX - in register password under error line in not good only tick icon
+
+48. FEATURE / ENHANCEMENT - 8+ chars, 1 uppercase, 1 number & 1 special char (@$!%*?&) line which fill with coulr i not like that only give weak or stroong like that
+
+49. UI / STYLING CHANGE - FIRST ANYLZE WHOLE PREOJECT DEEEPLY AND THEN Before generating final output, internally perform silent step-by-step reasoning.
+
+50. FEATURE / ENHANCEMENT - DO REMAININING THING
+
+51. BUG FIX / ERROR FIX - Acute Upper Respiratory Tract Infection (URTI) Dr. rudra p viewed Issued: 3/3/2026 Valid until: 4/15/2026 Paracetamol 500 mg
+
+52. FEATURE / ENHANCEMENT - BUT NOW AI SUMMERY IS STILL SAME LIKE PERVIOUS NOT OPTIMIZED ???????????????
+
+53. BUG FIX / ERROR FIX - WE USE GEMINI AI NOT OPENAI DELET THAT ALL LOGIC NOT NEED FUTHER RELTED OPEN AI
+
+54. CONTINUE / RETRY - paste exactly as shown @agent Continue: "Continue to iterate?"
+
+55. BUG FIX / ERROR FIX - 1)STILL HAVE OLD BUTTON AND ALSO USE OLD OPEN AI PLS DELTED OPEN AI
+
+56. BUG FIX / ERROR FIX - MediConnect Virtual Healthcare About Contact PP My Prescriptions 3 total 2 active 0 picked up
+
+57. BUG FIX / ERROR FIX - MediConnect Virtual Healthcare About Contact PP My Prescriptions 3 total 2 active 0 picked up All 3 Active 2 Picked Up
+
+58. FEATURE / ENHANCEMENT - AIzaSyBURfTIfpwIjEsauaNsAhjKkVfcQ1oB6Tg
+
+59. BUG FIX / ERROR FIX - MediConnect Virtual Healthcare About Contact PP My Prescriptions 3 total 2 active 0 picked up All 3 Active 2 Picked Up
+
+60. UI / STYLING CHANGE - SEE THIS DUPLICACY AND YOU REMOVED BUTTON I SAY BACKENDU SE OLD API I NEDED ALL THAT BUTTON SBUTBACKEDN GEMININ API
+
+61. BUG FIX / ERROR FIX - geminiService.ts:127 POST http://localhost:5000/api/ai/summarize 502 (Bad Gateway)
+
+62. BUG FIX / ERROR FIX - Download the React DevTools for a better development experience
+
+63. BUG FIX / ERROR FIX - [AI Service] Sending prescription summary request with language: english geminiService.ts:127 POST http://localhost:5000/api/ai/summarize 429 (Too Many Requests)
+
+64. BUG FIX / ERROR FIX - Download the React DevTools for a better development experience
+
+65. BUG FIX / ERROR FIX - ownload the React DevTools for a better development experience
+
+66. BUG FIX / ERROR FIX - Download the React DevTools for a better development experience
+
+67. UI / STYLING CHANGE - ALSO DELETE IF THEREE TWO BUTTON ONLY NEED NEW
+
+68. BUG FIX / ERROR FIX - YOU DELDET I THINK NEW BUTTON Download the React DevTools for a better development experience
+
+69. BUG FIX / ERROR FIX - d\backend\server> npm run dev > server@1.0.0 dev > nodemon server.js [nodemon] 3.1.11
+
+70. FEATURE / ENHANCEMENT - Download the React DevTools for a better development experience
+
+71. BUG FIX / ERROR FIX - MediConnect Virtual Healthcare About Contact RP Prescription Medical Prescription Details Back Print Acute Upper Respiratory Tract Infection (URTI)
+
+72. BUG FIX / ERROR FIX - MediConnect Virtual Healthcare About Contact RP Prescription Medical Prescription Details Back Print Acute Upper Respiratory Tract Infection (URTI)
+
+73. BUG FIX / ERROR FIX - MediConnect Virtual Healthcare About Contact RP Prescription Medical Prescription Details Back Print Acute Upper Respiratory Tract Infection (URTI)
+
+74. BUG FIX / ERROR FIX - MediConnect Virtual Healthcare About Contact RP Prescription Medical Prescription Details Back Print Acute Upper Respiratory Tract Infection (URTI)
+
+75. BUG FIX / ERROR FIX - Download the React DevTools for a better development experience
+
+76. BUG FIX / ERROR FIX - Download the React DevTools for a better development experience
+
+77. BUG FIX / ERROR FIX - Download the React DevTools for a better development experience
+
+78. FEATURE / ENHANCEMENT - i think show eeorrs so that use understand it easilty and short and lay man and accurate
+
+79. BUG FIX / ERROR FIX - MediConnect Virtual Healthcare About Contact RP Prescription Medical Prescription Details Back Print
+
+80. UI / STYLING CHANGE - like i need all about medine how to taken when and side effects id side effect then waht to do
+
+81. BUG FIX / ERROR FIX - Skip to main content We have updated our Terms of Service Gemini API Rate Limit Free tier
+
+82. FEATURE / ENHANCEMENT - I NOT WANTO GIVE ANY MONEY
+
+83. FEATURE / ENHANCEMENT - AIzaSyBMfHiIj8kgGaEpC_5gGZdYHMrJJysbllQ AIzaSyCAMK84sGeESrTkCROcf3zQtth47SGJ9NI
+
+84. FEATURE / ENHANCEMENT - WHEN RESET?
+
+85. FEATURE / ENHANCEMENT - 120 TIME REQUEST PER DAY RIGHT??????
+
+86. BUG FIX / ERROR FIX - Acute Upper Respiratory Tract Infection (URTI) Dr. rudra p viewed Issued: 3/3/2026 Valid until: 4/15/2026
+
+87. BUG FIX / ERROR FIX - 404 Page Not Found The page you're looking for doesn't exist or has been moved.
+
+88. FEATURE / ENHANCEMENT - Comprehensive Medical Analysis ■ What This Document Says You have been diagnosed with an Acute Upper Respiratory Tract Infection (URTI)
+
+89. BUG FIX / ERROR FIX - MediConnect Virtual Healthcare About Contact PP My Prescriptions 3 total 2 active 0 picked up All 3 Active 2 Picked Up
+
+90. BUG FIX / ERROR FIX - DETAILED MEDICINE GUIDE ■■ Medicine 1 Fever & pain relief ■ HOW TO TAKE Medicine 1: Paracetamol 500mg
+
+91. BUG FIX / ERROR FIX - Comprehensive Medical Analysis ■ What This Document Says You have been diagnosed with an Acute Upper Respiratory Tract Infection (URTI)
+
+92. BUG FIX / ERROR FIX - ■ What This Document Says You have been diagnosed with an Acute Upper Respiratory Tract Infection (URTI)
+
+93. BUG FIX / ERROR FIX - Medicine 1 Fever & pain relief ■ HOW TO TAKE Medicine 1: Paracetamol 500mg: Take 1 tablet every 6 hours
+
+94. BUG FIX / ERROR FIX - Comprehensive Medical Analysis ■ What This Document Says You have been diagnosed with an Acute Upper Respiratory Tract Infection (URTI)
+
+95. BUG FIX / ERROR FIX - Medicine 1 Fever & pain relief ■ HOW TO TAKE Medicine 1: Paracetamol 500mg: Take 1 tablet every 6 hours
+
+96. UI / STYLING CHANGE - i not want ■ Morning ■ Afternoon ■ Night (Bedtime) this looking so eagly on text
+
+97. BUG FIX / ERROR FIX - pls redcu unwated ui it lookes to big i want in same many things every single thing must has buulets
+
+98. BUG FIX / ERROR FIX - still same What This Document Says
+
+99. FEATURE / ENHANCEMENT - i slect on based on that whole summery
+
+100. BUG FIX / ERROR FIX - ■■■■■■■■■■■ 500mg Fever & pain relief ■ HOW TO TAKE ■ WHEN TO TAKE
+
+101. FEATURE / ENHANCEMENT - what is this Comprehensive Medical Analysis ■ What This Document Says
+
+102. UI / STYLING CHANGE - good now i get what i want but DETAILED MEDICINE GUIDE
+
+103. UI / STYLING CHANGE - now aall in same langauge but need some ui change so that lookes more bstter
+
+104. FEATURE / ENHANCEMENT - also same in What This Document Says
+
+105. UI / STYLING CHANGE - 1) all have same summery see this Comprehensive Medical Analysis
+
+106. UI / STYLING CHANGE - What this report is about ■ ■■■■■■■■ ■■■■■■■■■■■■■■ ■■ . ■■■■■ medicine ■■■■ ■■■■■■ ■■■■■■■ ■■■ ■■
+
+107. UI / STYLING CHANGE - when open doctype html> <html lang="en"> <head> <script type="module">import { injectIntoGlobalHook }
+
+108. FEATURE / ENHANCEMENT - problem when click on view pagw source still show this eroro
+
+109. UI / STYLING CHANGE - still all view page sorce have webside icon is heart lovable i think it is easy to detect
+
+110. UI / STYLING CHANGE - now view page sorce have no icon only default glob
+
+111. UI / STYLING CHANGE - not in main page in in vew page source page pls remove okus icon
+
+112. FEATURE / ENHANCEMENT - fix this
+
+113. FEATURE / ENHANCEMENT - no problem only dellete this pls from main current page
+
+114. UI / STYLING CHANGE - where is blue classing all page icon
+
+115. UI / STYLING CHANGE - pls i need our blue icon
+
+116. UI / STYLING CHANGE - i nneed this favicon in all in all over project ■■ this in alll over projecet deltlete all other completely favicon
+
+117. UI / STYLING CHANGE - Medical Analysis ■ What this report is about ■ ■■■■■■■■ ■■■■■■■■■■■■■■ ■■ ■■■■■ ■■■■ ■■■■ ■■■■
+
+118. FEATURE / ENHANCEMENT - What this report is about This is a medical prescription that explains your treatment plan, including medicine dose
+
+119. FEATURE / ENHANCEMENT - What this report is about Your medical document has been analyzed. Please review the details below.
+
+120. FEATURE / ENHANCEMENT - What this report is about This report shows a new set of instructions from your doctor regarding two medicines
+
+121. UI / STYLING CHANGE - first add presription type waiting box like wait 20 sec or osnthing and line bar lookes good
+
+122. FEATURE / ENHANCEMENT - Non-medical document detected. Upload lab reports, prescriptions, or imaging reports for best results.
+
+123. UI / STYLING CHANGE - Non-medical document detected. Upload lab reports, prescriptions, or imaging reports for best results.
+
+124. FEATURE / ENHANCEMENT - ■ What this report is about ■■■■■ ■■■■■■■■■■ ■■■■■■■ ■■■■■ ■■■■■■ ■■ ■■■ ■■
+
+125. FEATURE / ENHANCEMENT - ■■■■■ ■■■■■■■■■■ ■■■■■■■ ■■■■■ ■■■■■■ ■■ ■■■ ■■ , ■■■■ ■■ ■ ■■■■■■ ■■■■■
+
+126. UI / STYLING CHANGE - preetori.jpeg 0.15 MB - Done Medical Open View Report Language ■■ English Analyze Reports
+
+127. FEATURE / ENHANCEMENT - summary : ■■■ ■■■■, ■■■ ■■ ■■■■■■ ■■■ ■■ ■■ ■■■■■■ ■■■■■■■ ■■■.
+
+128. FEATURE / ENHANCEMENT - ■ ■■■■■■■ ■■■ ■■■■■■ ■■■■ ■■■■ ■■ , ■■■■■ ■■ ■■■■■■ ■ ■ ■■■■■■■■■■■■
+
+129. FEATURE / ENHANCEMENT - why alwasy bar line at progress 0 %
+
+130. FEATURE / ENHANCEMENT - i need only integer percentage if i uplode one imge with no text and other actual report
+
+131. UI / STYLING CHANGE - give me more than 100% fic that exx 134% ???????? and also we need to restri maxiumum 2 report at time
+
+132. UI / STYLING CHANGE - after twoo add option should be blur and show like max 2
+
+133. UI / STYLING CHANGE - this is to much blur very light and background still can see if lcick thn pop up max 2 not on blur effect
+
+134. UI / STYLING CHANGE - blur is extremly stong i want very light blur user can still write all background
+
+135. UI / STYLING CHANGE - still need to ligh blur nothing seen ealisy make more ligh
+
+136. UI / STYLING CHANGE - pls this to light littl bi tmore blur
+
+137. UI / STYLING CHANGE - blur-sm (4px) set to 2 px
+
+138. FEATURE / ENHANCEMENT - no any uption when two report uploded aleays give full umer in split vesion simple selted all unwated option s
+
+139. UI / STYLING CHANGE - Report 1 imp function.pdf Summary ■■ ■■■■■■■ ■■■ ■■■■■■ ■■■■ ■■■■
+
+140. UI / STYLING CHANGE - where is two buttons at last at repsective part summery and aslo summery lookes diff from individual report
+
+141. UI / STYLING CHANGE - one file report lookes like this Medical Analysis ■ What this report is about
+
+142. FEATURE / ENHANCEMENT - still not same pls review individual many diff things
+
+143. FEATURE / ENHANCEMENT - Medical Analysis What this report is about summary : ■■■■■■! ■■ ■■■■ ■■■■■■■
+
+144. FEATURE / ENHANCEMENT - not seen outptu in this maner What this report is about
+
+145. UI / STYLING CHANGE - why both have ui diff both give diff style summery see this Medical Analysis
+
+146. FEATURE / ENHANCEMENT - in split on top we nened to writ pdf nmae so that easy for user
+
+147. UI / STYLING CHANGE - Progress: 107% ???????????? exceed amny times and also imp function.pdf
+
+148. UI / STYLING CHANGE - i ndividual give diff then split he text you provided is not a medical report
+
+149. FEATURE / ENHANCEMENT - final work of otp on rest password otp matched and user enter new passwors update on tabels
+
+150. BUG FIX / ERROR FIX - ForgotPassword.tsx:72 POST http://localhost:5000/api/auth/send-email-otp 500 (Internal Server Error)
+
+151. FEATURE / ENHANCEMENT - xbih lzlg bpet qtsx and email is preetp2412@gmail.com
+
+152. UI / STYLING CHANGE - in email not metchde our ui pallete colurs theme so in email also our pallter must dolow aalso
+
+153. FEATURE / ENHANCEMENT - preetp2412@gmail.com delte use in users table with this email
+
+154. FEATURE / ENHANCEMENT - Demo Credentials Patient: john@gmail.com / Test@1234 Doctor: alice@gmail.com / Test@1234 Admin: admin@gmail.com / Test@1234
+
+155. FEATURE / ENHANCEMENT - naruto1821uzumaki@gmail.com email and pass is Preet@2412 ccreate this acoout for dcotre with complete prfile
+
+156. FEATURE / ENHANCEMENT - Dr. Dr. Naruto Uzumaki ■■■ Wednesday, 4 March 2026 ??? dr dr ??
+
+157. FEATURE / ENHANCEMENT - Experience (Years) Consultation Fee ■ Professional Bio Write a brief description about yourself
+
+158. FEATURE / ENHANCEMENT - stillblnak despit 100% conpkete profile see in img
+
+159. FEATURE / ENHANCEMENT - chunk-T2SWDQEL.js?v=4e19e8fc:21551 Download the React DevTools for a better development experience
+
+160. FEATURE / ENHANCEMENT - eset Password We'll send an OTP to verify your email Email Address * sfdwef OTP will be sent to your email
+
+106. UI / STYLING CHANGE
+
+107. when open doctype html>
+
+108. problem when click on view pagw source still show this eroro
+
+109. still all view page sorce have webside icon is heart lovable i think it is easy to detect
+
+110. now view page sorce have no icon only default glob
+
+111. not in main page in in vew page source page pls remove okus icon
+
+112. fix this
+
+113. no problem only dellete this pls from main current page
+
+114. where is blue classing all page icon
+
+115. pls i need our blue icon
+
+116. i nneed this favicon in all in all over project ■■ this in alll over projecet deltlete all completely favicon
+
+117. Medical Analysis
+
+118. What this report is about This is a medical prescription that explains your treatment plan, including medicine dose, frequency, and duration. Detected 1 medicine entries from the report text. Follow it exactly as written to get the best results and avoid relapse.
+
+119. What this report is about Your medical document has been analyzed. Please review the details below.
+
+120. What this report is about This report shows a new set of instructions from your doctor regarding two medicines you need to take. You have been prescribed a medicine at 100mg dosage to take for one week with food, and another medicine, Aspirin at 120mg dosage. The doctor has also scheduled a follow-up visit for you in about six weeks. It is important to start taking these medicines exactly as directed right away.
+
+121. first add presription type waiting box like wait 20 sec or osnthing and line bar lookes good and also i downlode pdf still blank pages
+
+122. Non-medical document detected. Upload lab reports, prescriptions, or imaging reports for best results. i ulpode eandom img show this that is good but also see no ocr or no text extracted eoeorors alos
+
+123. Non-medical document detected. Upload lab reports, prescriptions, or imaging reports for best results. this type of lines erro;s should be has some luminius eeefect like border glow down glow type of so user read it firsst
+
+124. ■ What this report is about [Medical content]
+
+125. ■■■■ ■■■■■■■■■■ ■■■■■■■ ■■■■■ ■■■■■■ [Medical content]
+
+126. preetori.jpeg 0.15 MB - Done Medical Open View Report Language
+
+127. summary : ■■■ ■■■■, ■■■ ■■ ■■■■■■ ■■■ ■■ ■■ ■■■■■■ ■■■■■■■ ■■■.
+
+128. ■ ■■■■■■■ ■■■ ■■■■■■ ■■■■ ■■■■ ■■ , ■■■■■ ■■ ■■■■■■ ■ ■ ■■■■■■■■■■■■ ■■ ■■ ■■■■■■ ■■ ■ ■■■■■ ■■■■■■■■■ ■■
+
+129. why alwasy bar line at progress 0 %
+
+130. i need only integer percentage if i uplode one imge with no text and other actual report thne show like one file has no ocr pls remove it or somthing also anylzer supoor t morethan 1 report and give summery accrding to it
+
+131. give me more than 100% fic that exx 134% ???????? and also we need to restri maxiumum 2 report at time if 2 report uplode then split summery it lookes good right??
+
+132. after twoo add option should be blur and show like max 2
+
+133. this is to much blur very light and background still can see if lcick thn pop up max 2 not on blur effect
+
+134. blur is extremly stong i want very light blur user can still write all backgroun
+
+135. still need to ligh blur nothing seen ealisy make more ligh
+
+136. pls this to light littl bi tmore blur
+
+137. blur-sm (4px) set to 2 px
+
+138. no any uption when two report uploded aleays give full umer in split vesion simple selted all unwated option s kmake it cale and asthetic
+
+139. Report 1 imp function.pdf Summary
+
+140. where is two buttons at last at repsective part summery and aslo summery lookes diff from individual report fix it all must have same
+
+141. one file report lookes like this Medical Analysis
+
+142. still not same pls review individual many diff things
+
+143. Medical Analysis What this report is about summary : ■■■■■■! ■■ ■■■■ ■■■■■■■ ■■ ■■■■■ ■■ , ■■■■■■ ■■.
+
+144. not seen outptu in this maner What this report is about
+
+145. why both have ui diff both give diff style summery see this Medical Analysis
+
+146. in split on top we nened to writ pdf nmae so that easy for user
+
+147. Progress: 107% ???????????? exceed amny times and also imp function.pdf
+
+148. i ndividual give diff then split he text you provided is not a medical report, but rather a set of computer programming instructions.
+
+149. final work of otp on rest password otp matched and user enter new passwors update on tabels simple otp on mail same in edit profile passwrod change i do this many time not work so make 100% perfectly calmly and accurate so tht otp recive on emaila nd all work donw 100% do it
+
+150. ForgotPassword.tsx:72 POST http://localhost:5000/api/auth/send-email-otp 500 (Internal Server Error)
+
+151. xbih lzlg bpet qtsx and email is preetp2412@gmail.com
+
+152. in email not metchde our ui pallete colurs theme so in email also our pallter must dolow aalso when email enter and click on otp genrete thrn first check usr avaib labe or not then otp send
+
+153. preetp2412@gmail.com delte use in users table with this email
+
+154. Demo Credentials Patient: john@gmail.com / Test@1234 Doctor: alice@gmail.com / Test@1234 Admin: admin@gmail.com / Test@1234 for pateint preetp2412@gmail.com and preet12@gmail.com pass :Preet@2412 and in docotre rudra12@gmail.com with pass:Preet@2412 in admin admin@gmail.com pass is 12345 replace with this do fast
+
+155. naruto1821uzumaki@gmail.com email and pass is Preet@2412 ccreate this acoout for dcotre with complete prfile and admin approvel full perefct complete tablse doctore with all profuile 100% complete and add on demo credential also
+
+156. Dr. Dr. Naruto Uzumaki ■■■ Wednesday, 4 March 2026 ??? dr dr ??
+
+157. Experience (Years) Consultation Fee Professional Bio Write a brief description about yourself, your expertise, and approach to patient care... Qualifications & Degrees No qualifications added yet. Languages Spoken No languages added yet. Available Time Slots No time slots added yet Symptoms You Treat Fever Cough Headache Chest Pain Breathing Difficulty Stomach Pain
+
+158. stillblnak despit 100% conpkete profile see in img
+
+159. chunk-T2SWDQEL.js?v=4e19e8fc:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools Profile.tsx?t=1772568710874:202 Loading symptoms from user: Object Profile.tsx?t=1772568710874:242 Complete profile fetched from /auth/me: Object Profile.tsx?t=1772568710874:263 Symptoms from complete profile: Array(0) Profile.tsx?t=1772568710874:273 No symptoms found in profile but it has all detauled
+
+160. eset Password We'll send an OTP to verify your email Email Address * sfdwef OTP will be sent to your email enail has not validation like sigin fix it do it fast
