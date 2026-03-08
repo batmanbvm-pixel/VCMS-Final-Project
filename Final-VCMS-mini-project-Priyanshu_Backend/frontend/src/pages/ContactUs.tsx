@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Mail, Phone, MapPin, Send, Clock, CheckCircle, MessageSquare, HeadphonesIcon } from "lucide-react";
+import { Mail, Phone, MapPin, Send, Clock, CheckCircle, MessageSquare } from "lucide-react";
 import api from "@/services/api";
 import { useNavigate } from "react-router-dom";
 
@@ -135,7 +135,7 @@ const ContactUs = () => {
       <div className="bg-sky-500 py-16 px-4 text-white border-b border-sky-300">
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 rounded-full px-4 py-1.5 mb-6 text-white">
-            <HeadphonesIcon className="h-4 w-4" />
+            <Mail className="h-4 w-4" />
             <span className="text-sm font-medium">Support Center</span>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">How can we help?</h1>
