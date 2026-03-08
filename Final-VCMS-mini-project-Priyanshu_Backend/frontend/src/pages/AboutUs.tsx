@@ -36,12 +36,7 @@ const AboutUs = () => {
     },
   ];
 
-  const stats = [
-    { value: "500+", label: "Verified Doctors" },
-    { value: "10k+", label: "Happy Patients" },
-    { value: "50k+", label: "Consultations" },
-    { value: "99.9%", label: "Uptime" },
-  ];
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-cyan-50 to-blue-50">
@@ -62,17 +57,7 @@ const AboutUs = () => {
         </div>
       </section>
 
-      {/* Stats */}
-      <section className="bg-white/40 backdrop-blur-sm border-b border-white/20 py-12 px-4">
-        <div className="container mx-auto max-w-4xl grid grid-cols-2 sm:grid-cols-4 gap-8">
-          {stats.map(({ value, label }) => (
-            <div key={label} className="text-center">
-              <p className="text-4xl font-bold text-slate-900">{value}</p>
-              <p className="text-slate-600 text-sm mt-1">{label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+
 
       {/* Mission & Vision */}
       <section className="py-20 px-4 bg-white/60 backdrop-blur-sm">
