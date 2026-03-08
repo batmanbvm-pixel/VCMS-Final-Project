@@ -54,7 +54,7 @@ export function DoctorCard({ doctor, onBookClick }: DoctorCardProps) {
       <div className="px-6 pt-14 pb-4">
         {/* Name and Specialization */}
         <h3 className="text-lg font-bold text-gray-900">
-          Dr. {doctor.name || doctor.specialization || 'Unknown'}
+          Dr. {doctor.name || doctor.specialization}
         </h3>
         <p className="text-sm text-blue-600 font-medium mb-3">
           {doctor.specialization || 'General'}

@@ -138,7 +138,7 @@ export function ContactUs() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-cyan-50 to-blue-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 py-20 px-4 text-white">
+      <div className="bg-sky-500 py-20 px-4 text-white border-b border-sky-300">
         <div className="container mx-auto px-4 text-center">
           <h1 className="text-4xl font-bold tracking-tight mb-4">Contact Us</h1>
           <p className="text-lg text-white/90 max-w-2xl mx-auto">

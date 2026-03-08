@@ -578,7 +578,7 @@ const PatientDashboard = () => {
     },
     {
       label: "Prescriptions",
-      value: myAppointments.filter((a) => getPrescriptionByAppointment(a._id)).length,
+      value: myAppointments.filter((a) => getPrescriptionByAppointment(a._id || a.id)).length,
       icon: FileText,
       card: "bg-white border-slate-200 shadow-sm hover:shadow-md transition-all",
       iconWrap: "bg-sky-100 text-sky-600",
@@ -594,22 +594,22 @@ const PatientDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-slate-50/50 to-sky-50/30">
-      <div className="container mx-auto px-4 py-6 space-y-6 max-w-7xl pb-12">
+      <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
 
       {/* ── Hero Header ─────────────────────────────────────────────── */}
-      <div className="rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-sm">
-        <div className="px-6 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5 bg-gradient-to-r from-white via-sky-50/40 to-cyan-50/50">
+      <div className="rounded-xl overflow-hidden bg-sky-500 border border-sky-300 shadow-md text-white">
+        <div className="px-6 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div className="space-y-2">
-            <p className="text-[11px] font-bold text-cyan-600 uppercase tracking-widest flex items-center gap-2">
+            <p className="text-[11px] font-bold text-white/90 uppercase tracking-widest flex items-center gap-2">
               <UserRound className="h-4 w-4" /> Patient Portal
             </p>
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Welcome, {user?.name || "Patient"}</h1>
-            <p className="text-slate-600 text-sm">Book appointments, view records, and stay on top of your health journey.</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Welcome, {user?.name || "Patient"}</h1>
+            <p className="text-sky-100 text-sm">Book appointments, view records, and stay on top of your health journey.</p>
             <div className="flex flex-wrap gap-2 pt-1">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 text-sky-700 border border-sky-200 px-3 py-1 text-xs font-semibold">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 text-white border border-white/30 px-3 py-1 text-xs font-semibold">
                 <Sparkles className="h-3.5 w-3.5" /> Personalized Care
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1 text-xs font-semibold">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 text-white border border-white/30 px-3 py-1 text-xs font-semibold">
                 <CheckCircle className="h-3.5 w-3.5" /> Health Records Ready
               </span>
             </div>
@@ -1110,7 +1110,10 @@ const PatientDashboard = () => {
                         )}
                         {apt.status === "Completed" && (
                           <>
-                            <Button size="sm" variant="outline" className="w-full" onClick={() => navigate(`/prescriptions/appointment/${apt._id}`)}>Prescription</Button>
+                            <Button size="sm" variant="outline" className="w-full" onClick={() => {
+                              const appointmentId = apt._id || apt.id;
+                              if (appointmentId) navigate(`/prescriptions/appointment/${appointmentId}`);
+                            }}>Prescription</Button>
                             {!apt.reviewSubmitted && <Button size="sm" variant="outline" className="w-full border-amber-200 text-amber-700" onClick={() => openReviewDialog(apt)}>Rate Doctor</Button>}
                           </>
                         )}
@@ -1251,7 +1254,7 @@ const PatientDashboard = () => {
               No, Keep It
             </AlertDialogCancel>
             <AlertDialogAction
-              className="rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold"
+              className="rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold"
               onClick={() => {
                 handleCancelAppointment();
                 setShowCancelDialog(false);
@@ -1274,7 +1277,7 @@ const PatientDashboard = () => {
           <AlertDialogFooter className="gap-2 sm:gap-2">
             <AlertDialogCancel className="rounded-xl border-slate-200">No, Keep</AlertDialogCancel>
             <AlertDialogAction
-              className="rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold"
+              className="rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold"
               onClick={() => {
                 handleClearCancelledAppointments();
                 setShowClearCancelledDialog(false);

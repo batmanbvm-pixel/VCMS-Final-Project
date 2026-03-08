@@ -499,30 +499,40 @@ const Profile = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-primary/5 p-4 md:p-6 space-y-6 max-w-3xl mx-auto pb-12">
 
       {/* Hero Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-sky-400 to-cyan-500 p-6 shadow-xl text-white">
-        <div className="relative flex items-center gap-5">
-          {/* Avatar */}
-          <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-cyan-300 via-sky-400 to-blue-500 flex items-center justify-center flex-shrink-0 border-3 border-white shadow-xl ring-2 ring-white/20">
-            <span className="text-2xl font-black text-white drop-shadow-lg">
-              {user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold truncate">{user.name}</h1>
-              {user.role === "doctor" && user.approvalStatus === "approved" && (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold bg-gradient-to-r from-green-400 to-emerald-500 text-white border border-green-300/50 px-2 py-1 rounded-full shadow-md">
-                  <BadgeCheck className="h-4 w-4" /> Verified
-                </span>
-              )}
+      <div className="rounded-2xl bg-sky-500 p-6 md:p-7 shadow-lg border border-sky-300 text-white">
+        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4 min-w-0">
+            {/* Avatar */}
+            <div className="relative h-20 w-20 rounded-full bg-white/20 border border-white/35 flex items-center justify-center flex-shrink-0 shadow-lg">
+              <User className="h-9 w-9 text-white" />
+              <span className="absolute -bottom-1 -right-1 inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-white text-sky-700 px-2 text-[10px] font-bold shadow-sm border border-sky-100">
+                {user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
+              </span>
             </div>
-            <p className="text-white/70 text-sm capitalize mt-0.5">{user.role} Account</p>
-            <p className="text-white/60 text-xs mt-1">{user.email}</p>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl font-bold truncate">{user.name}</h1>
+                {user.role === "doctor" && user.approvalStatus === "approved" && (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold bg-emerald-500 text-white border border-emerald-300/60 px-2 py-1 rounded-full shadow-sm">
+                    <BadgeCheck className="h-4 w-4" /> Verified
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full bg-white/20 border border-white/30 px-3 py-1 text-xs font-semibold capitalize">
+                  {user.role} account
+                </span>
+                <span className="text-sm text-white/90 truncate">{user.email}</span>
+              </div>
+            </div>
           </div>
+
           <Button
             size="sm"
             variant={editing ? "outline" : "secondary"}
-            className={editing ? "bg-white/10 border-white/30 text-white hover:bg-white/20" : "bg-white text-primary hover:bg-white/90 font-semibold"}
+            className={editing ? "bg-white/10 border-white/35 text-white hover:bg-white/20 font-semibold" : "bg-white text-sky-700 hover:bg-sky-50 font-semibold border border-white/60"}
             onClick={() => editing ? setEditing(false) : setEditing(true)}
           >
             {editing ? <><X className="h-3.5 w-3.5 mr-1" /> Cancel</> : <><Edit3 className="h-3.5 w-3.5 mr-1" /> Edit Profile</>}

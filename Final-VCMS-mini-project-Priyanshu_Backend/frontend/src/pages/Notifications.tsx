@@ -2,9 +2,16 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/hooks/useSocket";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import api from "@/services/api";
-import { Bell, CheckCircle2, Trash2, Eye, AlertCircle, Calendar, Pill, ClipboardList, UserCheck, Settings } from "lucide-react";
+import { Bell, CheckCircle2, Trash2, Eye, AlertCircle, Calendar, Pill, ClipboardList, UserCheck, Settings, MessageSquare, CheckCheck, RefreshCw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,12 +40,28 @@ interface Notification {
 }
 
 const TYPE_CONFIG: Record<string, { label: string; icon: any; bg: string; text: string; border: string }> = {
-  appointment:      { label: "Appointment",     icon: Calendar,      bg: "bg-sky-50",        text: "text-sky-600",     border: "border-sky-200" },
-  prescription:     { label: "Prescription",    icon: Pill,          bg: "bg-cyan-50",       text: "text-cyan-600",    border: "border-cyan-200" },
-  "medical-history":{ label: "Medical History", icon: ClipboardList, bg: "bg-sky-50",        text: "text-sky-600",     border: "border-sky-200" },
-  "doctor-approval":{ label: "Doctor Approval", icon: UserCheck,     bg: "bg-cyan-50",       text: "text-cyan-600",    border: "border-cyan-200" },
-  system:           { label: "System",          icon: Settings,      bg: "bg-slate-100",     text: "text-slate-600",   border: "border-slate-200" },
+  appointment:       { label: "Appointment",      icon: Calendar,      bg: "bg-sky-50",    text: "text-sky-600",    border: "border-sky-200" },
+  prescription:      { label: "Prescription",     icon: Pill,          bg: "bg-cyan-50",   text: "text-cyan-600",   border: "border-cyan-200" },
+  "medical-history": { label: "Medical History", icon: ClipboardList, bg: "bg-sky-50",    text: "text-sky-600",    border: "border-sky-200" },
+  "doctor-approval": { label: "Doctor Approval", icon: UserCheck,     bg: "bg-cyan-50",   text: "text-cyan-600",   border: "border-cyan-200" },
+  approval:          { label: "New Approval",     icon: CheckCheck,    bg: "bg-green-50",  text: "text-green-600",  border: "border-green-200" },
+  contact:           { label: "New Contact",      icon: MessageSquare, bg: "bg-purple-50", text: "text-purple-600", border: "border-purple-200" },
+  system:            { label: "System",           icon: Settings,      bg: "bg-slate-100", text: "text-slate-600",  border: "border-slate-200" },
 };
+
+const ADMIN_ALLOWED_TYPES = new Set(["approval", "contact"]);
+
+const isAdminRelevantNotification = (n: Notification | any) => {
+  const type = String(n?.type || "").toLowerCase();
+  if (ADMIN_ALLOWED_TYPES.has(type)) return true;
+
+  // Backward compatibility: older notifications were saved as "system"
+  const haystack = `${String(n?.title || "")} ${String(n?.message || "")}`.toLowerCase();
+  const looksLikeApproval = haystack.includes("approval") || haystack.includes("awaiting approval") || haystack.includes("registration");
+  const looksLikeContact = haystack.includes("contact") || haystack.includes("support") || haystack.includes("request");
+  return type === "system" && (looksLikeApproval || looksLikeContact);
+};
+
 
 const Notifications = () => {
   const { user } = useAuth();
@@ -50,6 +73,7 @@ const Notifications = () => {
   const [selectedType, setSelectedType] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [showClearAllDialog, setShowClearAllDialog] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const filterTabs = [
     { key: "all", label: "All Notifications" },
@@ -67,6 +91,9 @@ const Notifications = () => {
     if (!socket || !user?._id) return;
     const handleNewNotification = (data: any) => {
       if (data.userId === user._id || data.toUserId === user._id) {
+        if (user?.role === "admin" && !isAdminRelevantNotification(data)) {
+          return;
+        }
         setNotifications((prev) => [data, ...prev]);
         setUnreadCount((prev) => prev + 1);
         toast({ title: data.title || "New Notification", description: data.message });
@@ -82,7 +109,13 @@ const Notifications = () => {
       let url = `/notifications?page=${page}&limit=15`;
       if (selectedType === "unread") url += `&unreadOnly=true`;
       const response = await api.get(url);
-      if (response.data?.success) setNotifications(response.data.notifications || []);
+      if (response.data?.success) {
+        const incoming: Notification[] = response.data.notifications || [];
+        const filtered = user?.role === "admin"
+          ? incoming.filter((n) => isAdminRelevantNotification(n))
+          : incoming;
+        setNotifications(filtered);
+      }
     } catch (error: any) {
       toast({ title: "Error", description: error?.response?.data?.message || "Failed to load notifications", variant: "destructive" });
     } finally {
@@ -93,7 +126,16 @@ const Notifications = () => {
   const fetchUnreadCount = async () => {
     try {
       const response = await api.get("/notifications/unread-count");
-      if (response.data?.success) setUnreadCount(response.data.unreadCount || 0);
+      if (response.data?.success) {
+        if (user?.role === "admin") {
+          const notificationsRes = await api.get("/notifications?page=1&limit=100&unreadOnly=true");
+          const unreadNotifications: Notification[] = notificationsRes.data?.notifications || [];
+          const unreadAdminRelevant = unreadNotifications.filter((n) => isAdminRelevantNotification(n));
+          setUnreadCount(unreadAdminRelevant.length);
+        } else {
+          setUnreadCount(response.data.unreadCount || 0);
+        }
+      }
     } catch { /* silent */ }
   };
 
@@ -140,16 +182,28 @@ const Notifications = () => {
     }
   };
 
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true);
+      await Promise.all([fetchNotifications(), fetchUnreadCount()]);
+      toast({ title: "Refreshed", description: "Notifications updated" });
+    } catch {
+      // handled in fetch functions
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-cyan-50 to-blue-50">
-      <div className="container mx-auto px-4 py-6 space-y-6 max-w-7xl pb-12">
+    <div className="min-h-screen bg-slate-50">
+      <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
 
       {/* Hero Header */}
-      <div className="rounded-2xl bg-gradient-to-r from-sky-500 via-cyan-500 to-blue-600 p-6 text-white shadow-md">
+      <div className="rounded-3xl bg-sky-500 p-6 text-white shadow-xl border border-sky-300">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-              <Bell className="h-6 w-6 text-white" />
+            <div className="h-14 w-14 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center flex-shrink-0 shadow-inner">
+                <Bell className="h-8 w-8 text-white fill-sky-300/40" />
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-white leading-tight">Notifications</h1>
@@ -159,10 +213,17 @@ const Notifications = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              className="flex items-center gap-2 text-sm font-semibold text-white bg-white/15 hover:bg-white/25 px-4 py-2 rounded-xl transition-colors border border-white/30"
+              disabled={refreshing}
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+            </button>
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllAsRead}
-                className="flex items-center gap-2 text-sm font-semibold text-white bg-white/15 hover:bg-white/25 px-4 py-2 rounded-xl transition-colors border border-white/20 backdrop-blur-sm"
+                className="flex items-center gap-2 text-sm font-semibold text-white bg-white/15 hover:bg-white/25 px-4 py-2 rounded-xl transition-colors border border-white/30"
               >
                 <CheckCircle2 className="h-4 w-4" /> Mark all read
               </button>
@@ -170,7 +231,7 @@ const Notifications = () => {
             {notifications.length > 0 && (
               <button
                 onClick={() => setShowClearAllDialog(true)}
-                className="flex items-center gap-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-600/90 px-4 py-2 rounded-xl transition-colors border border-red-300/30 backdrop-blur-sm"
+                className="flex items-center gap-2 text-sm font-semibold text-red-100 bg-red-700/80 hover:bg-red-700 px-4 py-2 rounded-xl transition-colors border border-red-500/40"
               >
                 <Trash2 className="h-4 w-4" /> Clear all
               </button>
@@ -179,25 +240,44 @@ const Notifications = () => {
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-md overflow-hidden">
-        <div className="flex gap-2 p-2 bg-slate-50/50">
-          {filterTabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => { setSelectedType(tab.key); setPage(1); }}
-              className={`flex-1 px-4 py-2.5 text-sm font-semibold rounded-xl transition-all ${
-                selectedType === tab.key
-                  ? "bg-gradient-to-r from-sky-500 to-sky-600 text-white shadow-md"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white"
-              }`}
+      {/* Filter dropdown */}
+      <div className="rounded-3xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+        <div className="p-3 bg-slate-50/50 flex items-center gap-2">
+          <div className="flex-1">
+            <Select
+              value={selectedType}
+              onValueChange={(value) => {
+                setSelectedType(value);
+                setPage(1);
+              }}
             >
-              {tab.label}
-              {tab.key === "all" && unreadCount > 0 && (
-                <span className="ml-2 bg-white/25 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{unreadCount}</span>
-              )}
-            </button>
-          ))}
+              <SelectTrigger className="h-11 bg-white border-2 border-slate-200 focus:border-sky-500">
+                <SelectValue placeholder="Filter notifications" />
+              </SelectTrigger>
+              <SelectContent>
+                {filterTabs.map((tab) => (
+                  <SelectItem key={tab.key} value={tab.key}>
+                    {tab.key === "all" && unreadCount > 0
+                      ? `${tab.label} (${unreadCount} unread)`
+                      : tab.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {selectedType !== "all" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSelectedType("all");
+                setPage(1);
+              }}
+              className="h-11 text-red-700 border-red-300 bg-red-50 hover:bg-red-100"
+            >
+              Clear Filter
+            </Button>
+          )}
         </div>
 
         {/* List */}
@@ -214,7 +294,7 @@ const Notifications = () => {
             />
           </div>
         ) : (
-          <div className="divide-y divide-slate-200">
+          <div className="p-3 space-y-3">
             {notifications.map((notif) => {
               const cfg = TYPE_CONFIG[notif.type] || TYPE_CONFIG.system;
               const Icon = cfg.icon;
@@ -222,7 +302,7 @@ const Notifications = () => {
               return (
                 <div
                   key={notif._id}
-                  className={`flex items-start gap-4 px-5 py-4 transition-all duration-200 hover:bg-slate-50/60 ${!notif.isRead ? "bg-sky-50/30" : ""}`}
+                  className={`flex items-start gap-4 px-5 py-4 rounded-2xl border transition-all duration-200 hover:shadow-md ${!notif.isRead ? "bg-sky-50/50 border-sky-200" : "bg-slate-50/70 border-slate-200"}`}
                 >
                   {/* Icon */}
                   <div className={`flex-shrink-0 h-11 w-11 rounded-xl ${cfg.bg} flex items-center justify-center border ${cfg.border}`}>
@@ -240,9 +320,7 @@ const Notifications = () => {
                           <AlertCircle className="h-3 w-3" /> Urgent
                         </span>
                       )}
-                      {!notif.isRead && (
-                        <span className="h-2 w-2 bg-sky-500 rounded-full animate-pulse" />
-                      )}
+                      {!notif.isRead && <span className="h-2 w-2 bg-sky-500 rounded-full animate-pulse" />}
                       <span className="text-[10px] text-slate-500 ml-auto font-medium">
                         {new Date(notif.createdAt).toLocaleDateString()} · {new Date(notif.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
@@ -261,7 +339,7 @@ const Notifications = () => {
                         onClick={() => handleMarkAsRead(notif._id)}
                         title="Mark as read"
                         aria-label="Mark notification as read"
-                        className="h-9 w-9 flex items-center justify-center rounded-xl text-slate-500 hover:text-sky-600 hover:bg-sky-50 transition-all duration-200 border border-transparent hover:border-sky-200 hover:scale-105"
+                        className="h-9 w-9 flex items-center justify-center rounded-xl text-slate-500 hover:text-sky-700 hover:bg-sky-50 transition-all duration-200 border border-transparent hover:border-sky-200 hover:scale-105"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -318,7 +396,7 @@ const Notifications = () => {
           <AlertDialogFooter className="gap-2 sm:gap-2">
             <AlertDialogCancel className="rounded-xl border-slate-200">No, Keep</AlertDialogCancel>
             <AlertDialogAction
-              className="rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold"
+              className="rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold"
               onClick={() => {
                 handleDeleteAll();
                 setShowClearAllDialog(false);

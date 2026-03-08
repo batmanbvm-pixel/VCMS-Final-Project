@@ -38,6 +38,7 @@ const AdminApprovals = () => {
   const [pendingDoctors, setPendingDoctors] = useState<DoctorApproval[]>([]);
   const [pendingPatients, setPendingPatients] = useState<PatientApproval[]>([]);
   const [approvalLoading, setApprovalLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [rejectingDoctor, setRejectingDoctor] = useState<DoctorApproval | null>(null);
   const [rejectingPatient, setRejectingPatient] = useState<PatientApproval | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -46,9 +47,10 @@ const AdminApprovals = () => {
     fetchPendingUsers();
   }, []);
 
-  const fetchPendingUsers = async () => {
+  const fetchPendingUsers = async (manualRefresh = false) => {
     try {
-      setLoading(true);
+      if (manualRefresh) setIsRefreshing(true);
+      if (!manualRefresh) setLoading(true);
       const [doctorsRes, patientsRes] = await Promise.all([
         api.get('/admin/doctors/pending-list').catch(() => ({ data: { doctors: [] } })),
         api.get('/admin/patients/pending').catch(() => ({ data: { patients: [] } })),
@@ -64,7 +66,8 @@ const AdminApprovals = () => {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setIsRefreshing(false);
+      if (!manualRefresh) setLoading(false);
     }
   };
 
@@ -169,16 +172,16 @@ const AdminApprovals = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
-      {/* Header */}
+    <div className="container mx-auto px-6 py-8 space-y-6 max-w-7xl pb-12">
+      {/* Header - Consistent with AdminDashboard */}
       <div className="rounded-xl bg-sky-500 p-6 text-white shadow-md border border-sky-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Manage Approvals</h1>
-            <p className="mt-1 text-sky-100 text-sm">Review and approve new doctor and patient registrations</p>
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><CheckCircle className="h-6 w-6" /> Pending Approvals</h1>
+            <p className="mt-1 text-sky-100 text-sm">Review and approve pending users and requests</p>
           </div>
-          <Button variant="outline" size="sm" className="gap-2 bg-white/15 border-white/30 text-white hover:bg-white/25" onClick={() => fetchPendingUsers()}>
-            <RefreshCw className="h-4 w-4" /> Refresh
+          <Button variant="outline" size="sm" className="gap-2 bg-white/15 border-white/30 text-white hover:bg-white/25" onClick={() => fetchPendingUsers(true)} disabled={loading || isRefreshing}>
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> {isRefreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
       </div>
@@ -211,23 +214,23 @@ const AdminApprovals = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-slate-200">
+      <div className="flex gap-2 border-b border-slate-200 pb-2">
         <button
           onClick={() => setApprovalTab("doctors")}
-          className={`px-6 py-3 font-semibold text-sm transition-all border-b-2 ${
+          className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
             approvalTab === "doctors"
-              ? "border-primary text-primary bg-primary/5"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+              ? "bg-sky-500 text-white shadow-sm"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
           }`}
         >
           👨‍⚕️ New Doctors ({pendingDoctors.length})
         </button>
         <button
           onClick={() => setApprovalTab("patients")}
-          className={`px-6 py-3 font-semibold text-sm transition-all border-b-2 ${
+          className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
             approvalTab === "patients"
-              ? "border-primary text-primary bg-primary/5"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+              ? "bg-sky-500 text-white shadow-sm"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
           }`}
         >
           👤 New Patients ({pendingPatients.length})
@@ -249,16 +252,16 @@ const AdminApprovals = () => {
             </Card>
           ) : (
             pendingDoctors.map((doctor) => (
-              <Card key={doctor._id} className="border-slate-200 shadow-sm rounded-xl">
+              <Card key={doctor._id} className="border-slate-200 shadow-sm rounded-2xl">
                 <CardContent className="pt-6">
                   <div className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-3">
+                    <div className="space-y-3 min-w-0">
                       <div>
                         <h3 className="text-xl font-bold text-slate-900">{doctor.name}</h3>
-                        <Badge className="mt-2 bg-sky-100 text-sky-800 border-sky-200">{doctor.specialization}</Badge>
+                        <Badge className="mt-2 bg-sky-100 text-sky-800 border-sky-200 rounded-md">{doctor.specialization}</Badge>
                       </div>
 
-                      <div className="space-y-2 text-sm">
+                      <div className="space-y-2 text-sm rounded-xl border border-slate-200 bg-slate-50 p-3">
                         <div className="flex items-center gap-2 text-slate-700">
                           <Mail className="w-4 h-4" />
                           {doctor.email}
@@ -273,7 +276,7 @@ const AdminApprovals = () => {
                         </div>
                         <div className="flex items-center gap-2 text-slate-700">
                           <FileText className="w-4 h-4" />
-                          License: {doctor.licenseNumber}
+                          License: {doctor.licenseNumber || 'Not provided'}
                         </div>
                         <div className="flex items-center gap-2 text-slate-700">
                           <Calendar className="w-4 h-4" />
@@ -295,27 +298,29 @@ const AdminApprovals = () => {
                       )}
                     </div>
 
-                    <div className="flex flex-col gap-3">
+                    <div className="flex items-end">
+                      <div className="w-full md:max-w-[280px] grid grid-cols-2 gap-3">
                       <Button
-                        size="lg"
-                        className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold shadow-lg shadow-green-600/20"
+                        size="sm"
+                        className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
                         onClick={() => handleApproveDoctor(doctor._id)}
                         disabled={approvalLoading}
                       >
-                        <CheckCircle className="w-5 h-5 mr-2" />
-                        Approve Doctor
+                        <CheckCircle className="w-4 h-4 mr-1.5" />
+                        Approve
                       </Button>
 
                       <Button
-                        size="lg"
+                        size="sm"
                         variant="outline"
-                        className="border-red-300 text-red-700 hover:bg-red-50"
+                        className="h-10 border-red-300 text-red-700 hover:bg-red-50 rounded-xl font-semibold"
                         onClick={() => setRejectingDoctor(doctor)}
                         disabled={approvalLoading}
                       >
-                        <XCircle className="w-5 h-5 mr-2" />
+                        <XCircle className="w-4 h-4 mr-1.5" />
                         Reject
                       </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -340,16 +345,16 @@ const AdminApprovals = () => {
             </Card>
           ) : (
             pendingPatients.map((patient) => (
-              <Card key={patient._id} className="border-0 shadow-lg hover:shadow-xl transition-shadow">
+              <Card key={patient._id} className="border-slate-200 shadow-sm rounded-2xl">
                 <CardContent className="pt-6">
                   <div className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-3">
+                    <div className="space-y-3 min-w-0">
                       <div>
                         <h3 className="text-xl font-bold text-slate-900">{patient.name}</h3>
-                        <Badge className="mt-2 bg-cyan-100 text-cyan-800">{patient.gender}</Badge>
+                        <Badge className="mt-2 bg-cyan-100 text-cyan-800 rounded-md">{patient.gender}</Badge>
                       </div>
 
-                      <div className="space-y-2 text-sm">
+                      <div className="space-y-2 text-sm rounded-xl border border-slate-200 bg-slate-50 p-3">
                         <div className="flex items-center gap-2 text-slate-600">
                           <Mail className="w-4 h-4" />
                           {patient.email}
@@ -369,27 +374,29 @@ const AdminApprovals = () => {
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-3">
+                    <div className="flex items-end">
+                      <div className="w-full md:max-w-[280px] grid grid-cols-2 gap-3">
                       <Button
-                        size="lg"
-                        className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold shadow-lg shadow-green-600/20 hover:shadow-xl hover:scale-105 transition-all duration-200"
+                        size="sm"
+                        className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
                         onClick={() => handleApprovePatient(patient._id)}
                         disabled={approvalLoading}
                       >
-                        <CheckCircle className="w-5 h-5 mr-2" />
-                        Approve Patient
+                        <CheckCircle className="w-4 h-4 mr-1.5" />
+                        Approve
                       </Button>
 
                       <Button
-                        size="lg"
+                        size="sm"
                         variant="outline"
-                        className="border-red-300 text-red-700 hover:bg-red-50 hover:scale-105 transition-all duration-200"
+                        className="h-10 border-red-300 text-red-700 hover:bg-red-50 rounded-xl font-semibold"
                         onClick={() => setRejectingPatient(patient)}
                         disabled={approvalLoading}
                       >
-                        <XCircle className="w-5 h-5 mr-2" />
+                        <XCircle className="w-4 h-4 mr-1.5" />
                         Reject
                       </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -409,6 +416,9 @@ const AdminApprovals = () => {
             <CardContent className="pt-6 space-y-4">
               <p className="text-sm text-muted-foreground">
                 Provide a reason for rejecting <strong>{rejectingDoctor.name}</strong>'s registration:
+              </p>
+              <p className="text-xs text-slate-500 -mt-2">
+                This reason will be sent to the doctor via email and notification.
               </p>
               <Textarea
                 placeholder="Reason for rejection (e.g., incomplete qualifications, invalid license...)"
@@ -433,7 +443,7 @@ const AdminApprovals = () => {
                   disabled={approvalLoading || !rejectReason.trim()}
                 >
                   <XCircle className="w-4 h-4 mr-2" />
-                  Reject
+                  Reject & Send Email
                 </Button>
               </div>
             </CardContent>
@@ -451,6 +461,9 @@ const AdminApprovals = () => {
             <CardContent className="pt-6 space-y-4">
               <p className="text-sm text-muted-foreground">
                 Provide a reason for rejecting <strong>{rejectingPatient.name}</strong>'s registration:
+              </p>
+              <p className="text-xs text-slate-500 -mt-2">
+                This reason will be sent to the patient via email and notification.
               </p>
               <Textarea
                 placeholder="Reason for rejection (e.g., invalid information, suspicious activity...)"
@@ -475,7 +488,7 @@ const AdminApprovals = () => {
                   disabled={approvalLoading || !rejectReason.trim()}
                 >
                   <XCircle className="w-4 h-4 mr-2" />
-                  Reject
+                  Reject & Send Email
                 </Button>
               </div>
             </CardContent>

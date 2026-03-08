@@ -32,7 +32,7 @@ const DoctorPatients = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6 max-w-7xl pb-12">
+    <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
       {/* Header */}
       <div className="rounded-xl bg-sky-500 text-white p-6 shadow-md border border-sky-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -86,7 +86,7 @@ const DoctorPatients = () => {
               </CardHeader>
               <CardContent className="space-y-2">
                 {apts.sort((a, b) => b.date.localeCompare(a.date)).map((apt) => {
-                  const rx = getPrescriptionByAppointment(apt.id);
+                  const rx = getPrescriptionByAppointment(apt._id || apt.id);
                   return (
                     <div key={apt.id} className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
                       <div className="flex items-center gap-3 text-sm">
@@ -100,7 +100,14 @@ const DoctorPatients = () => {
                       </div>
                       <div className="flex gap-1">
                         {rx ? (
-                          <Button size="sm" variant="outline" className="text-xs h-7 transition-all duration-200 hover:scale-105" onClick={() => navigate(`/prescriptions/${rx._id || apt.id}`)}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs h-7 transition-all duration-200 hover:scale-105"
+                            onClick={() =>
+                              navigate(rx?._id ? `/prescriptions/${rx._id}` : `/prescriptions/appointment/${apt.id}`)
+                            }
+                          >
                             <FileText className="h-3 w-3 mr-1" /> Prescription
                           </Button>
                         ) : (

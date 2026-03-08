@@ -16,10 +16,10 @@ const userSchema = new mongoose.Schema(
     },
     // Note: username field removed per simplified requirements;
     // user identity will be handled using name/email only.
+    // Email uniqueness enforced via partial index (email_unique_active) for non-deleted users only
     email: {
       type: String,
       required: true,
-      unique: true,
       index: true,
     },
     password: {
@@ -32,10 +32,9 @@ const userSchema = new mongoose.Schema(
       default: "patient",
       index: true,
     },
+    // Phone uniqueness enforced via partial index (phone_unique_active) for non-deleted users only
     phone: {
       type: String,
-      unique: true,
-      sparse: true,
     },
     address: {
       type: String,

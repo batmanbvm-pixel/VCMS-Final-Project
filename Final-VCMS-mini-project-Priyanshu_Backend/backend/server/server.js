@@ -455,10 +455,13 @@ const doListen = (port) =>
 
 const main = async () => {
   try {
+    console.log("🚀 Starting VCMS Server...");
     await connectDB();
-    await doListen(PORT);
+    const actualPort = await doListen(PORT);
+    console.log(`✅ Server running on port ${actualPort}`);
+    console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
   } catch (err) {
-    // Startup error handled
+    console.error("💥 Server startup failed:", err.message);
     process.exit(1);
   }
 };

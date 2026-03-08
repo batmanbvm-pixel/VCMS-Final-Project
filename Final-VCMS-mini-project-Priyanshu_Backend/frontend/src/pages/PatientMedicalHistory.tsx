@@ -174,9 +174,9 @@ const PatientMedicalHistory = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-primary/5">
-      <div className="container mx-auto px-4 py-6 space-y-6 max-w-7xl pb-12">
+      <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
       {/* Hero Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-sky-500 via-sky-600 to-primary p-6 shadow-md border border-sky-300 text-white">
+      <div className="rounded-xl bg-sky-500 p-6 shadow-md border border-sky-300 text-white">
         <div className="pointer-events-none absolute -top-16 -right-16 h-56 w-56 rounded-full bg-white/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
         <div className="relative flex flex-col lg:flex-row lg:items-center gap-5">

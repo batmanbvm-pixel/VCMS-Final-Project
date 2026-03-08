@@ -65,6 +65,7 @@ const DoctorDashboard = () => {
   const [isOnline, setIsOnline] = useState(false);
   const [profileCompletion, setProfileCompletion] = useState(0);
   const [canGoOnline, setCanGoOnline] = useState(false);
+  const [approvalStatus, setApprovalStatus] = useState("");
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [onlineLoading, setOnlineLoading] = useState(false);
   const [recentFeedback, setRecentFeedback] = useState<DoctorFeedback[]>([]);
@@ -94,6 +95,7 @@ const DoctorDashboard = () => {
       if (res.data) {
         setProfileCompletion(res.data.profileCompletionPercentage || 0);
         setCanGoOnline(res.data.canGoOnline || false);
+        setApprovalStatus(String(res.data.approvalStatus || '').toLowerCase());
         setMissingFields(res.data.missingFields || []);
         setIsOnline(res.data.onlineStatus === 'online');
       }
@@ -351,7 +353,8 @@ const DoctorDashboard = () => {
                 <Alert className="bg-sky-50 border-sky-200">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
                   <AlertDescription className="text-xs text-amber-800">
-                    Complete your profile to go online
+                    You can go online only after admin approval and 100% profile completion.
+                    {approvalStatus && approvalStatus !== 'approved' ? ' (Approval pending)' : ''}
                   </AlertDescription>
                 </Alert>
               )}
@@ -712,7 +715,7 @@ const DoctorDashboard = () => {
                       <div className="flex gap-2">
                         {rx && (
                           <Button size="sm" variant="ghost" className="text-xs text-slate-600 transition-all duration-200 hover:scale-105"
-                            onClick={() => navigate(`/prescriptions/${rx._id || apt._id}`)}>View Rx</Button>
+                            onClick={() => navigate(rx?._id ? `/prescriptions/${rx._id}` : `/prescriptions/appointment/${apt._id}`)}>View Rx</Button>
                         )}
                         <Button
                           size="sm"

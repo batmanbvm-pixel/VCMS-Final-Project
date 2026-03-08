@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const medicalIntelligenceService = require('../services/medicalIntelligenceService');
-const auth = require('../middleware/auth');
+const { protect } = require('../middleware/authMiddleware');
 
 /**
  * @route   POST /api/medical-intelligence/prescription/:id/analyze
  * @desc    Generate medical intelligence report for a prescription
  * @access  Private
  */
-router.post('/prescription/:id/analyze', auth, async (req, res) => {
+router.post('/prescription/:id/analyze', protect, async (req, res) => {
   try {
     const { language = 'English' } = req.body;
     const prescriptionId = req.params.id;
@@ -34,7 +34,7 @@ router.post('/prescription/:id/analyze', auth, async (req, res) => {
  * @desc    Get existing medical intelligence report
  * @access  Private
  */
-router.get('/prescription/:id/report', auth, async (req, res) => {
+router.get('/prescription/:id/report', protect, async (req, res) => {
   try {
     const prescriptionId = req.params.id;
     const report = await medicalIntelligenceService.generateReport(prescriptionId);

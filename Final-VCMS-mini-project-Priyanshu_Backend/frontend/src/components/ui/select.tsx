@@ -101,7 +101,13 @@ SelectLabel.displayName = SelectPrimitive.Label.displayName;
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => {
+  const rawValue = (props as { value?: string }).value;
+  const safeValue = typeof rawValue === "string" && rawValue.trim().length > 0
+    ? rawValue
+    : "__invalid_empty_value__";
+
+  return (
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
@@ -109,6 +115,7 @@ const SelectItem = React.forwardRef<
       className,
     )}
     {...props}
+    value={safeValue}
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
@@ -118,7 +125,8 @@ const SelectItem = React.forwardRef<
 
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
   </SelectPrimitive.Item>
-));
+  );
+});
 SelectItem.displayName = SelectPrimitive.Item.displayName;
 
 const SelectSeparator = React.forwardRef<

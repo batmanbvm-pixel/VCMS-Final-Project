@@ -41,7 +41,7 @@ async function seedDatabase() {
         specialization: 'System Administrator',
       },
       {
-        name: 'Dr. Alice Johnson',
+        name: 'Alice Johnson',
         email: 'alice@gmail.com',
         password: hashedPassword,
         role: 'doctor',

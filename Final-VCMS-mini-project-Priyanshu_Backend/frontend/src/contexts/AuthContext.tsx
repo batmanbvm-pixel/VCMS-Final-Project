@@ -127,7 +127,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.status === 201) return { success: true, message: 'Registration successful' };
       return { success: false, message: res.data?.message || 'Registration failed' };
     } catch (error: any) {
-      const errorMsg = error.response?.data?.errors?.[0]?.msg || error.response?.data?.message || "Server error";
+      const validationErrors = error.response?.data?.errors;
+      const joinedValidationMessage = Array.isArray(validationErrors) && validationErrors.length > 0
+        ? validationErrors
+            .map((e: any) => e?.msg)
+            .filter(Boolean)
+            .join(' | ')
+        : '';
+
+      const errorMsg =
+        error.userMessage ||
+        joinedValidationMessage ||
+        error.response?.data?.message ||
+        'Registration failed. Please check your details and try again.';
+
       return { success: false, message: errorMsg };
     }
   }, []);
@@ -171,7 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return { success: false, message: 'Deletion failed' };
     } catch (error: any) {
-      const msg = error.response?.data?.message || 'Server error';
+      const msg = error.userMessage || error.response?.data?.message || 'Server error';
       return { success: false, message: msg };
     }
   }, []);
@@ -184,7 +197,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return { success: false, message: 'Failed to send warning' };
     } catch (error: any) {
-      const msg = error.response?.data?.message || 'Server error';
+      const msg = error.userMessage || error.response?.data?.message || 'Server error';
       return { success: false, message: msg };
     }
   }, []);

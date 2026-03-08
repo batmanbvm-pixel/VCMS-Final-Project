@@ -127,7 +127,7 @@ const DoctorTodayAppointments = () => {
                   patientName={apt.patientName}
                   variant="outline"
                   size="sm"
-                  className="border-sky-200 text-sky-600 hover:bg-sky-50"
+                    className="bg-sky-100 border-sky-200 text-sky-700 hover:bg-sky-200"
                 />
               )}
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColor(apt.status)}`}>{apt.status}</span>
@@ -142,7 +142,7 @@ const DoctorTodayAppointments = () => {
               <Button
                 size="sm"
                 variant="outline"
-                className="text-red-500 border-slate-200 hover:bg-red-50 transition-all duration-200 hover:scale-105"
+                className="bg-red-100 text-red-700 border-red-200 hover:bg-red-200 transition-all duration-200 hover:scale-105"
                 onClick={() => setRejectDialog({ open: true, appointmentId, reason: "", loading: false })}
               >
                 <XCircle className="h-3 w-3 mr-1" /> Reject
@@ -162,7 +162,7 @@ const DoctorTodayAppointments = () => {
               >
                 <Video className="h-3 w-3" /> Join Video Call
               </Button>
-              <Button size="sm" variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50 transition-all duration-200 hover:scale-105" onClick={() => updateAppointmentStatus(appointmentId, "Completed")}>
+              <Button size="sm" variant="outline" className="bg-emerald-100 border-emerald-200 text-emerald-700 hover:bg-emerald-200 transition-all duration-200 hover:scale-105" onClick={() => updateAppointmentStatus(appointmentId, "Completed")}>
                 Mark Completed
               </Button>
             </div>
@@ -173,7 +173,7 @@ const DoctorTodayAppointments = () => {
               <Button size="sm" onClick={() => navigate(`/video/${appointmentId}`)} className="gap-1 bg-sky-500 hover:bg-sky-600 text-white transition-all duration-200 hover:scale-105">
                 <Video className="h-3 w-3" /> Join Video Call
               </Button>
-              <Button size="sm" variant="outline" className="gap-1 border-slate-200 text-sky-600 hover:bg-sky-50 transition-all duration-200 hover:scale-105" onClick={() => updateAppointmentStatus(appointmentId, "Completed")}>
+              <Button size="sm" variant="outline" className="gap-1 bg-emerald-100 border-emerald-200 text-emerald-700 hover:bg-emerald-200 transition-all duration-200 hover:scale-105" onClick={() => updateAppointmentStatus(appointmentId, "Completed")}>
                 <CheckCircle className="h-3 w-3" /> Complete
               </Button>
             </div>
@@ -181,11 +181,16 @@ const DoctorTodayAppointments = () => {
 
           {statusLower === "completed" && (
             <div className="flex gap-2 flex-wrap">
-              <Button size="sm" variant="outline" className="gap-1 border-slate-200 text-sky-600 hover:bg-sky-50 transition-all duration-200 hover:scale-105" onClick={() => navigate(`/create-prescription/${appointmentId}`)}>
+              <Button size="sm" variant="outline" className="gap-1 bg-sky-100 border-sky-200 text-sky-700 hover:bg-sky-200 transition-all duration-200 hover:scale-105" onClick={() => navigate(`/create-prescription/${appointmentId}`)}>
                 <CheckCircle className="h-3 w-3" /> {rx ? "Edit Prescription" : "Write Prescription"}
               </Button>
               {rx && (
-                <Button size="sm" variant="outline" className="text-xs border-slate-200 text-slate-700 hover:bg-slate-50 transition-all duration-200 hover:scale-105" onClick={() => navigate(`/prescriptions/${rx._id || appointmentId}`)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200 transition-all duration-200 hover:scale-105"
+                  onClick={() => navigate(rx?._id ? `/prescriptions/${rx._id}` : `/prescriptions/appointment/${appointmentId}`)}
+                >
                   View Rx
                 </Button>
               )}
@@ -197,14 +202,14 @@ const DoctorTodayAppointments = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6 max-w-7xl pb-12">
+    <div className="container mx-auto px-6 py-8 space-y-6 max-w-7xl pb-12">
       <div className="rounded-xl bg-sky-500 text-white p-6 shadow-md border border-sky-300">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <CalendarDays className="h-6 w-6" /> Appointments
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <CalendarDays className="h-7 w-7" /> Appointments
             </h1>
-            <p className="mt-1 text-sky-100 text-sm">Today: {todayAppointments.length} • Upcoming: {upcomingAppointments.length} • Completed: {completedAppointments.length}</p>
+            <p className="mt-2 text-white/90 text-sm">Today: {todayAppointments.length} • Upcoming: {upcomingAppointments.length} • Completed: {completedAppointments.length}</p>
           </div>
           <Button variant="outline" size="sm" className="gap-2 bg-white/15 text-white border-white/30 hover:bg-white/25 transition-all duration-200 hover:scale-105" onClick={() => fetchAppointments()}>
             <RefreshCw className="h-4 w-4" /> Refresh
@@ -272,7 +277,7 @@ const DoctorTodayAppointments = () => {
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setRejectDialog({ open: false, appointmentId: null, reason: "", loading: false })}>
+            <Button variant="outline" className="bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300" onClick={() => setRejectDialog({ open: false, appointmentId: null, reason: "", loading: false })}>
               Keep Appointment
             </Button>
             <Button variant="destructive" onClick={handleRejectWithWarning} disabled={rejectDialog.loading || !rejectDialog.reason.trim()}>

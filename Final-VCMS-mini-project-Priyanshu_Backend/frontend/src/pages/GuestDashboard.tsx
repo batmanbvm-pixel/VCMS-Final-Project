@@ -107,7 +107,8 @@ const GuestDashboard = () => {
     const lower = filterName.toLowerCase();
     return doctors
       .filter((d) => (d.name || '').toLowerCase().startsWith(lower) || (d.name || '').toLowerCase().includes(lower))
-      .map((d) => `Dr. ${d.name || 'Unknown'}`)
+      .filter((d) => d.name)
+      .map((d) => `Dr. ${d.name}`)
       .slice(0, 5);
   }, [doctors, filterName]);
 
@@ -170,14 +171,14 @@ const GuestDashboard = () => {
       <div className="max-w-7xl mx-auto mt-16 px-4 md:px-8 pb-8 space-y-6">
 
         {/* ── Hero Header ─────────────────────────────────────────────── */}
-        <div className="rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-sm">
-          <div className="px-6 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5 bg-gradient-to-r from-white via-sky-50/40 to-cyan-50/50">
+        <div className="rounded-xl overflow-hidden bg-sky-500 border border-sky-300 shadow-md text-white">
+          <div className="px-6 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
             <div className="space-y-2">
-              <p className="text-[11px] font-bold text-cyan-600 uppercase tracking-widest flex items-center gap-2">
+              <p className="text-[11px] font-bold text-white/90 uppercase tracking-widest flex items-center gap-2">
                 <Search className="h-4 w-4" /> Guest Portal
               </p>
-              <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Find Your Doctor</h1>
-              <p className="text-slate-600 text-sm">Browse doctors and check availability before booking.</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Find Your Doctor</h1>
+              <p className="text-sky-100 text-sm">Browse doctors and check availability before booking.</p>
             </div>
           </div>
         </div>
@@ -241,15 +242,32 @@ const GuestDashboard = () => {
               <CardTitle className="text-slate-900 text-xl flex items-center gap-2">
                 <Search className="h-5 w-5 text-sky-600" /> Search & Filter Doctors
               </CardTitle>
-              <Button
-                size="sm"
-                onClick={handleRefreshDoctors}
-                disabled={loadingDoctors}
-                className="gap-2 bg-sky-500 hover:bg-sky-600 text-white"
-              >
-                <RefreshCw className={`h-4 w-4 ${loadingDoctors ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
+              <div className="flex items-center gap-2">
+                {(filterSpec !== "none" || filterLocation.trim() || filterName.trim() || selectedSymptoms.length > 0) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setFilterSpec("none");
+                      setFilterLocation("");
+                      setFilterName("");
+                      setSelectedSymptoms([]);
+                    }}
+                    className="text-red-700 border-red-300 bg-red-50 hover:bg-red-100"
+                  >
+                    Clear Filters
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  onClick={handleRefreshDoctors}
+                  disabled={loadingDoctors}
+                  className="gap-2 bg-sky-500 hover:bg-sky-600 text-white"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingDoctors ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="pt-6">
@@ -412,7 +430,7 @@ const GuestDashboard = () => {
                                 {doc.experience || 0} yrs
                               </td>
                               <td className="px-4 py-3 text-center">
-                                <span className="font-bold text-slate-900">₹{doc.consultationFee || 'N/A'}</span>
+                                <span className="font-bold text-slate-900">₹{doc.consultationFee || 500}</span>
                               </td>
                               <td className="px-4 py-3 text-sm text-slate-600">
                                 {formatLocation(doc.location) || "Not specified"}

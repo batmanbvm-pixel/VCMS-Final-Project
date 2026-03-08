@@ -46,7 +46,7 @@ const AboutUs = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-cyan-50 to-blue-50">
       {/* Hero */}
-      <section className="bg-gradient-to-r from-sky-500 to-cyan-500 py-24 px-4 text-white">
+      <section className="bg-sky-500 py-24 px-4 text-white border-b border-sky-300">
         <div className="container mx-auto max-w-3xl text-center space-y-6">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 border border-white/30 text-white text-sm font-medium">
             <Activity className="h-3.5 w-3.5" />

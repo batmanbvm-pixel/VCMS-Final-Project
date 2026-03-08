@@ -25,6 +25,14 @@ const doctorReviewSchema = new mongoose.Schema(
       type: String,
       default: 'Anonymous Patient',
     },
+    doctorName: {
+      type: String,
+      default: 'Doctor',
+    },
+    doctorSpecialization: {
+      type: String,
+      default: 'General Practitioner',
+    },
     rating: {
       type: Number,
       min: 1,

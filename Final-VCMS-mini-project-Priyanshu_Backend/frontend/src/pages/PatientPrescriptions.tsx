@@ -3,6 +3,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/hooks/useSocket";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import api from "@/services/api";
 import { FileText, Download, CheckCircle2, Clock, AlertCircle, Pill, X, Stethoscope, CalendarDays, Printer } from "lucide-react";
@@ -164,7 +171,7 @@ const PatientPrescriptions = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-primary/5">
-        <div className="container mx-auto px-4 py-6 max-w-7xl pb-12">
+        <div className="container mx-auto px-4 py-8 max-w-7xl pb-12">
           <LoadingSpinner text="Loading prescriptions..." />
         </div>
       </div>
@@ -173,9 +180,9 @@ const PatientPrescriptions = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-primary/5">
-      <div className="container mx-auto px-4 py-6 space-y-6 max-w-7xl pb-12">
+      <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-sky-500 via-sky-600 to-primary p-6 shadow-sm border border-slate-200 text-white">
+      <div className="rounded-xl bg-sky-500 p-6 shadow-md border border-sky-300 text-white">
         <div className="pointer-events-none absolute -top-16 -right-16 h-56 w-56 rounded-full bg-white/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
         <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
@@ -196,37 +203,29 @@ const PatientPrescriptions = () => {
       </div>
 
       {/* Status Filter */}
-      <div className="flex gap-1 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-xl p-1 w-fit shadow-sm flex-wrap">
-        {[
-          { value: "all",       label: "All", count: countAll },
-          { value: "active",    label: "Active", count: countActive },
-          { value: "picked_up", label: "Picked Up", count: countPickedUp },
-        ].map(({ value, label }) => {
-          const count = value === "all"
-            ? countAll
-            : value === "active"
-              ? countActive
-              : countPickedUp;
-          return (
-            <button
-              key={value}
-              onClick={() => setStatusFilter(value)}
-              aria-pressed={statusFilter === value}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
-                statusFilter === value
-                  ? "bg-sky-500 text-white shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              {label}
-              {count > 0 && (
-                <span className={`text-xs rounded-full px-1.5 py-0.5 ${
-                  statusFilter === value ? "bg-white/30 text-white" : "bg-muted text-muted-foreground"
-                }`}>{count}</span>
-              )}
-            </button>
-          );
-        })}
+      <div className="w-full max-w-md flex items-center gap-2">
+        <div className="flex-1">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-11 bg-white border-2 border-slate-200 focus:border-sky-500 shadow-sm">
+              <SelectValue placeholder="Filter prescriptions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All ({countAll})</SelectItem>
+              <SelectItem value="active">Active ({countActive})</SelectItem>
+              <SelectItem value="picked_up">Picked Up ({countPickedUp})</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {statusFilter !== "all" && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setStatusFilter("all")}
+            className="h-11 text-red-700 border-red-300 bg-red-50 hover:bg-red-100"
+          >
+            <X className="h-4 w-4 mr-1" /> Clear Filters
+          </Button>
+        )}
       </div>
 
       {/* Prescriptions list */}
@@ -254,7 +253,7 @@ const PatientPrescriptions = () => {
                       <div>
                         <p className="font-bold text-slate-900">{rx.diagnosis}</p>
                         <p className="text-sm text-slate-600 flex items-center gap-1 mt-0.5">
-                          <Stethoscope className="h-3.5 w-3.5" /> Dr. {rx.doctorId?.name || 'Unknown'}
+                          <Stethoscope className="h-3.5 w-3.5" /> Dr. {rx.doctorId?.name || 'Doctor'}
                         </p>
                       </div>
                       <span className={`text-xs px-2.5 py-1 rounded-full font-semibold capitalize flex items-center gap-1.5 ${getStatusBadgeClass(rx.status)}`}>

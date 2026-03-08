@@ -121,7 +121,7 @@ export function PublicDoctorProfile() {
               <div className="flex-1 mt-8">
                 <div className="flex items-center gap-2 mb-2">
                   <h1 className="text-3xl font-bold text-slate-900">
-                    Dr. {doctor.name || doctor.specialization || 'Unknown'}
+                    Dr. {doctor.name || doctor.specialization}
                   </h1>
                   {doctor.approvalStatus === 'approved' && (
                     <Verified className="w-6 h-6 text-primary" />
@@ -244,7 +244,7 @@ export function PublicDoctorProfile() {
                     {doctor.location.address || 'Address not provided'}
                   </p>
                   <p className="text-slate-600 text-sm">
-                    {doctor.location.city || 'Unknown city'}
+                    {doctor.location.city || doctor.location.state || 'Location not specified'}
                     {doctor.location.state ? `, ${doctor.location.state}` : ''}{' '}
                     {doctor.location.zipCode || ''}
                   </p>

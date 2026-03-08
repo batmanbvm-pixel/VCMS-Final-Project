@@ -631,6 +631,7 @@ exports.getMyDoctorReviews = async (req, res) => {
 
     const normalizedReviews = reviews.map((review) => ({
       ...review,
+      patientId: review.patientId?._id || review.patientId,
       patientName: review.patientName || review.patientId?.name || 'Verified Patient',
     }));
 

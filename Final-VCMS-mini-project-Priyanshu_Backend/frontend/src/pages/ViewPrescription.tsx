@@ -332,8 +332,8 @@ const ViewPrescription = () => {
               )}
             </div>
 
-            {/* AI Summary — shown to patients and doctors */}
-            {(role === "patient" || role === "doctor") && (
+            {/* AI Summary — shown to patients, doctors, and admin */}
+            {(role === "patient" || role === "doctor" || role === "admin") && (
               <div className="border-t pt-6 print:hidden">
                 <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 space-y-2">
                   <p className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">

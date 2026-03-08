@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -11,7 +13,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Star, RefreshCw, Trash2, Flag, AlertTriangle } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Search, Star, RefreshCw, Trash2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import api from "@/services/api";
 import { EmptyState } from "@/components/EmptyState";
@@ -26,7 +31,6 @@ interface Review {
   rating: number;
   comment: string;
   createdAt: string;
-  flagged?: boolean;
 }
 
 interface ReviewStats {
@@ -53,11 +57,35 @@ const AdminReviews = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [ratingFilter, setRatingFilter] = useState<number | "all">("all");
   const [deletingReview, setDeletingReview] = useState<Review | null>(null);
-  const [flaggingReview, setFlaggingReview] = useState<Review | null>(null);
   const [viewMode, setViewMode] = useState<"all" | "doctor" | "patient">("all");
   const [sortFilter, setSortFilter] = useState<"newest" | "highest" | "lowest">("newest");
-  const [warningUser, setWarningUser] = useState<{ userId: string; userName: string; type: 'doctor' | 'patient' } | null>(null);
-  const [warningMessage, setWarningMessage] = useState("");
+  const [warningDialog, setWarningDialog] = useState({
+    open: false,
+    userId: "",
+    userName: "",
+    userType: "" as 'doctor' | 'patient' | '',
+    reason: "",
+    message: "",
+    loading: false,
+  });
+  const [expandedDoctors, setExpandedDoctors] = useState<Set<string>>(new Set());
+  const [expandedPatients, setExpandedPatients] = useState<Set<string>>(new Set());
+
+  const toggleDoctorExpand = (doctorId: string) => {
+    setExpandedDoctors(prev => {
+      const newSet = new Set(prev);
+      newSet.has(doctorId) ? newSet.delete(doctorId) : newSet.add(doctorId);
+      return newSet;
+    });
+  };
+
+  const togglePatientExpand = (patientId: string) => {
+    setExpandedPatients(prev => {
+      const newSet = new Set(prev);
+      newSet.has(patientId) ? newSet.delete(patientId) : newSet.add(patientId);
+      return newSet;
+    });
+  };
 
   useEffect(() => {
     fetchReviews();
@@ -111,10 +139,6 @@ const AdminReviews = () => {
       
       setReviews(reviewsData);
       setStats(statsData);
-      
-      if (reviewsData.length > 0) {
-        toast({ title: "Reviews loaded", description: `${reviewsData.length} reviews found.` });
-      }
     } catch (err: any) {
       toast({
         title: "Error",
@@ -142,48 +166,61 @@ const AdminReviews = () => {
     }
   };
 
-  const handleFlagReview = async () => {
-    if (!flaggingReview) return;
-    try {
-      await api.put(`/admin/reviews/${flaggingReview._id}/flag`, { flagged: !flaggingReview.flagged });
-      toast({ title: "Success", description: `Review ${flaggingReview.flagged ? "unflagged" : "flagged"} successfully.` });
-      setReviews(reviews.map(r => r._id === flaggingReview._id ? { ...r, flagged: !r.flagged } : r));
-      setFlaggingReview(null);
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: err.response?.data?.message || "Failed to flag review",
-        variant: "destructive",
-      });
-    }
-  };
 
   const handleSendWarning = async () => {
-    if (!warningUser) return;
+    if (!warningDialog.userId || !warningDialog.message.trim()) {
+      toast({ title: "Required", description: "Please enter a warning message.", variant: "destructive" });
+      return;
+    }
+
+    const reasonLabelMap: Record<string, string> = {
+      "high-cancellation": "High Cancellation Rate",
+      "no-show": "Frequent No-shows",
+      "poor-ratings": "Poor Ratings",
+      "inappropriate-feedback": "Inappropriate Feedback",
+      "violation": "Policy Violation",
+      "other": "Other",
+    };
+    const reasonLabel = warningDialog.reason ? reasonLabelMap[warningDialog.reason] || warningDialog.reason : "";
+    const composedMessage = reasonLabel
+      ? `${reasonLabel}: ${warningDialog.message.trim()}`
+      : warningDialog.message.trim();
+
     try {
-      const message = warningMessage.trim() || `Administrative warning issued due to feedback policy review.`;
-      await api.put(`/admin/users/${warningUser.userId}/warn`, { message });
+      setWarningDialog((prev) => ({ ...prev, loading: true }));
+      await api.put(`/admin/users/${warningDialog.userId}/warn`, {
+        message: composedMessage,
+      });
       toast({
         title: "Success",
-        description: `Warning sent to ${warningUser.userName}`,
+        description: `Warning sent to ${warningDialog.userName}`,
       });
-      setWarningUser(null);
-      setWarningMessage("");
-    } catch (err: any) {
+      setWarningDialog({ open: false, userId: "", userName: "", userType: "", reason: "", message: "", loading: false });
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: err.response?.data?.message || "Failed to send warning",
+        description: error.response?.data?.message || "Failed to send warning",
         variant: "destructive",
       });
+      setWarningDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
   const filteredReviews = reviews
     .filter((r) => {
+      // Lenient validation: only filter out reviews that are completely broken
+      // Must have at least one valid identifier
+      const hasMinimalData = (r.doctorName || r.patientName) && r.rating;
+      if (!hasMinimalData) return false;
+      
+      // Only filter out explicit invalid markers
+      if (r.doctorName && (r.doctorName.toLowerCase() === 'unknown' || r.doctorName === 'N/A')) return false;
+      if (r.patientName && (r.patientName.toLowerCase() === 'unknown' || r.patientName === 'N/A')) return false;
+      
       const matchesSearch =
-        r.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.doctorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.comment.toLowerCase().includes(searchQuery.toLowerCase());
+        (r.patientName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.doctorName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.comment || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesRating = ratingFilter === "all" || r.rating === ratingFilter;
       return matchesSearch && matchesRating;
     })
@@ -192,6 +229,14 @@ const AdminReviews = () => {
       if (sortFilter === "lowest") return a.rating - b.rating;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
+
+  const hasActiveFilters = searchQuery.trim().length > 0 || ratingFilter !== "all" || sortFilter !== "newest";
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setRatingFilter("all");
+    setSortFilter("newest");
+  };
 
   // Group reviews by doctor
   const reviewsByDoctor = filteredReviews.reduce((acc, review) => {
@@ -356,32 +401,61 @@ const AdminReviews = () => {
             className="pl-9 h-10 bg-white border-slate-200 focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
+          <Select value={String(ratingFilter)} onValueChange={(val) => setRatingFilter(val === "all" ? "all" : Number(val))}>
+            <SelectTrigger className="w-40 h-10 bg-white border-slate-200">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="font-medium">All Ratings</SelectItem>
+              <SelectItem value="5" className="font-medium text-yellow-600">
+                <span className="flex items-center gap-2">
+                  <span className="text-yellow-500">★★★★★</span> 5 Stars
+                </span>
+              </SelectItem>
+              <SelectItem value="4" className="font-medium text-yellow-600">
+                <span className="flex items-center gap-2">
+                  <span className="text-yellow-500">★★★★</span> 4 Stars
+                </span>
+              </SelectItem>
+              <SelectItem value="3" className="font-medium text-yellow-600">
+                <span className="flex items-center gap-2">
+                  <span className="text-yellow-500">★★★</span> 3 Stars
+                </span>
+              </SelectItem>
+              <SelectItem value="2" className="font-medium text-orange-600">
+                <span className="flex items-center gap-2">
+                  <span className="text-orange-500">★★</span> 2 Stars
+                </span>
+              </SelectItem>
+              <SelectItem value="1" className="font-medium text-red-600">
+                <span className="flex items-center gap-2">
+                  <span className="text-red-500">★</span> 1 Star
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sortFilter} onValueChange={(val) => setSortFilter(val as "newest" | "highest" | "lowest")}>
+            <SelectTrigger className="w-40 h-10 bg-white border-slate-200">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest First</SelectItem>
+              <SelectItem value="highest">Highest First</SelectItem>
+              <SelectItem value="lowest">Lowest First</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {hasActiveFilters && (
           <Button
-            variant={ratingFilter === "all" ? "default" : "outline"}
             size="sm"
-            onClick={() => setRatingFilter("all")}
+            variant="outline"
+            onClick={clearFilters}
+            className="text-red-700 border-red-300 bg-red-50 hover:bg-red-100"
           >
-            All Ratings
+            Clear Filters
           </Button>
-          {[5, 4, 3].map((rating) => (
-            <Button
-              key={rating}
-              variant={ratingFilter === rating ? "default" : "outline"}
-              size="sm"
-              onClick={() => setRatingFilter(rating)}
-              className="gap-1"
-            >
-              {rating} <Star className="h-3 w-3 fill-current" />
-            </Button>
-          ))}
-        </div>
-        <div className="flex gap-2 items-center">
-          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Sort:</span>
-          <Button size="sm" variant={sortFilter === "newest" ? "default" : "outline"} onClick={() => setSortFilter("newest")}>Newest First</Button>
-          <Button size="sm" variant={sortFilter === "highest" ? "default" : "outline"} onClick={() => setSortFilter("highest")}>Highest First</Button>
-          <Button size="sm" variant={sortFilter === "lowest" ? "default" : "outline"} onClick={() => setSortFilter("lowest")}>Lowest First</Button>
-        </div>
+        )}
       </div>
 
       {/* View Mode Toggle - Three Tabs: All, Doctor Based, Patient Based */}
@@ -432,10 +506,10 @@ const AdminReviews = () => {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-auto">
+          <div className="overflow-auto rounded-xl border border-slate-200 bg-white">
             <Table className="min-w-[980px]">
               <TableHeader>
-                <TableRow className="bg-slate-50/50 border-b border-slate-200">
+                <TableRow className="sticky top-0 z-10 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-300">
                   <TableHead className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Patient</TableHead>
                   <TableHead className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Doctor</TableHead>
                   <TableHead className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Rating</TableHead>
@@ -449,16 +523,16 @@ const AdminReviews = () => {
                   <TableRow
                     key={review._id}
                     className={`border-b border-slate-100 hover:bg-slate-100/60 transition-all duration-200 ${
-                      index % 2 === 0 ? "bg-white" : "bg-slate-50/30"
-                    } ${review.flagged ? "bg-red-50" : ""}`}
+                      index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
+                    }`}
                   >
                     <TableCell className="font-medium text-slate-900">
-                      {review.patientName}
+                      {review.patientName || 'Patient'}
                     </TableCell>
                     <TableCell className="text-slate-600">
                       <div>
-                        <p className="font-medium">Dr. {review.doctorName}</p>
-                        <p className="text-xs text-slate-500">{review.doctorSpecialization}</p>
+                        <p className="font-medium">Dr. {review.doctorName || 'Doctor'}</p>
+                        <p className="text-xs text-slate-500">{review.doctorSpecialization || 'General'}</p>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -482,7 +556,15 @@ const AdminReviews = () => {
                         <Button
                           size="sm"
                           className="h-8 px-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold"
-                          onClick={() => setWarningUser({ userId: review.doctorId, userName: `Dr. ${review.doctorName}`, type: 'doctor' })}
+                          onClick={() => setWarningDialog({
+                            open: true,
+                            userId: review.doctorId,
+                            userName: `Dr. ${review.doctorName}`,
+                            userType: 'doctor',
+                            reason: "",
+                            message: "",
+                            loading: false,
+                          })}
                           title="Warn Doctor"
                           aria-label="Warn doctor"
                         >
@@ -492,26 +574,20 @@ const AdminReviews = () => {
                         <Button
                           size="sm"
                           className="h-8 px-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold"
-                          onClick={() => setWarningUser({ userId: review.patientId, userName: review.patientName, type: 'patient' })}
+                          onClick={() => setWarningDialog({
+                            open: true,
+                            userId: review.patientId,
+                            userName: review.patientName,
+                            userType: 'patient',
+                            reason: "",
+                            message: "",
+                            loading: false,
+                          })}
                           title="Warn Patient"
                           aria-label="Warn patient"
                         >
                           <AlertTriangle className="h-3.5 w-3.5 mr-1" />
                           Pt
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className={`h-8 w-8 p-0 ${
-                            review.flagged
-                              ? "text-orange-600 hover:bg-orange-50"
-                              : "text-slate-500 hover:bg-slate-100"
-                          }`}
-                          onClick={() => setFlaggingReview(review)}
-                          title={review.flagged ? "Unflag" : "Flag"}
-                          aria-label={review.flagged ? "Unflag review" : "Flag review"}
-                        >
-                          <Flag className="h-4 w-4" />
                         </Button>
                         <Button
                           size="sm"
@@ -566,10 +642,10 @@ const AdminReviews = () => {
               <CardContent className="p-6">
                 <div className="flex items-start gap-4 mb-4">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
-                    {patient.patientName.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                    {(patient.patientName || 'PT').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-lg text-slate-900">{patient.patientName}</h3>
+                    <h3 className="font-bold text-lg text-slate-900">{patient.patientName || 'Patient'}</h3>
                     <p className="text-sm text-slate-500">Patient</p>
                   </div>
                 </div>
@@ -589,7 +665,15 @@ const AdminReviews = () => {
                   <Button
                     size="sm"
                     className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs"
-                    onClick={() => setWarningUser({ userId: patient.patientId, userName: patient.patientName, type: 'patient' })}
+                    onClick={() => setWarningDialog({
+                      open: true,
+                      userId: patient.patientId,
+                      userName: patient.patientName,
+                      userType: 'patient',
+                      reason: "",
+                      message: "",
+                      loading: false,
+                    })}
                   >
                     Warn Patient
                   </Button>
@@ -598,7 +682,7 @@ const AdminReviews = () => {
                 <div className="border-t border-slate-200 pt-4 space-y-3">
                   <h4 className="font-semibold text-sm text-slate-700">Recent Feedback</h4>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {patient.reviews.slice(0, 3).map((review: Review) => (
+                    {(expandedPatients.has(patient.patientId) ? patient.reviews : patient.reviews.slice(0, 3)).map((review: Review) => (
                       <div key={review._id} className="bg-slate-50 rounded-lg p-3 text-sm">
                         <div className="flex items-center justify-between mb-1">
                           <p className="font-medium text-slate-900">Dr. {review.doctorName}</p>
@@ -614,12 +698,15 @@ const AdminReviews = () => {
                           </div>
                         </div>
                         <p className="text-xs text-slate-500 mb-1">{review.doctorSpecialization}</p>
-                        <p className="text-slate-600 line-clamp-2">{review.comment || "No comment"}</p>
+                        <p className="text-slate-600 line-clamp-2">{review.comment || "—"}</p>
                       </div>
                     ))}
                     {patient.reviews.length > 3 && (
-                      <button className="w-full text-center text-xs font-semibold text-cyan-600 hover:text-cyan-700 py-2 rounded-lg hover:bg-cyan-50 transition-colors">
-                        View all {patient.reviews.length} feedback
+                      <button 
+                        onClick={() => togglePatientExpand(patient.patientId)}
+                        className="w-full text-center text-xs font-semibold text-cyan-600 hover:text-cyan-700 py-2 rounded-lg hover:bg-cyan-50 transition-colors"
+                      >
+                        {expandedPatients.has(patient.patientId) ? `Show less feedback` : `View all ${patient.reviews.length} feedback`}
                       </button>
                     )}
                   </div>
@@ -653,11 +740,11 @@ const AdminReviews = () => {
                 {/* Doctor Header */}
                 <div className="flex items-start gap-4 mb-4">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
-                    {doctor.doctorName.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                    {(doctor.doctorName || 'DR').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-lg text-slate-900">Dr. {doctor.doctorName}</h3>
-                    <p className="text-sm text-slate-500">{doctor.doctorSpecialization}</p>
+                    <h3 className="font-bold text-lg text-slate-900">Dr. {doctor.doctorName || 'Doctor'}</h3>
+                    <p className="text-sm text-slate-500">{doctor.doctorSpecialization || 'General'}</p>
                   </div>
                 </div>
 
@@ -677,7 +764,15 @@ const AdminReviews = () => {
                   <Button
                     size="sm"
                     className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs"
-                    onClick={() => setWarningUser({ userId: doctor.doctorId, userName: `Dr. ${doctor.doctorName}`, type: 'doctor' })}
+                    onClick={() => setWarningDialog({
+                      open: true,
+                      userId: doctor.doctorId,
+                      userName: `Dr. ${doctor.doctorName}`,
+                      userType: 'doctor',
+                      reason: "",
+                      message: "",
+                      loading: false,
+                    })}
                   >
                     Warn Doctor
                   </Button>
@@ -687,7 +782,7 @@ const AdminReviews = () => {
                 <div className="border-t border-slate-200 pt-4 space-y-3">
                   <h4 className="font-semibold text-sm text-slate-700">Recent Feedback</h4>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {doctor.reviews.slice(0, 3).map((review: Review) => (
+                    {(expandedDoctors.has(doctor.doctorId) ? doctor.reviews : doctor.reviews.slice(0, 3)).map((review: Review) => (
                       <div key={review._id} className="bg-slate-50 rounded-lg p-3 text-sm">
                         <div className="flex items-center justify-between mb-1">
                           <p className="font-medium text-slate-900">{review.patientName}</p>
@@ -702,12 +797,15 @@ const AdminReviews = () => {
                             ))}
                           </div>
                         </div>
-                        <p className="text-slate-600 line-clamp-2">{review.comment || "No comment"}</p>
+                        <p className="text-slate-600 line-clamp-2">{review.comment || "—"}</p>
                       </div>
                     ))}
                     {doctor.reviews.length > 3 && (
-                      <button className="w-full text-center text-xs font-semibold text-sky-600 hover:text-sky-700 py-2 rounded-lg hover:bg-sky-50 transition-colors">
-                        View all {doctor.reviews.length} feedback
+                      <button 
+                        onClick={() => toggleDoctorExpand(doctor.doctorId)}
+                        className="w-full text-center text-xs font-semibold text-sky-600 hover:text-sky-700 py-2 rounded-lg hover:bg-sky-50 transition-colors"
+                      >
+                        {expandedDoctors.has(doctor.doctorId) ? `Show less feedback` : `View all ${doctor.reviews.length} feedback`}
                       </button>
                     )}
                   </div>
@@ -737,55 +835,84 @@ const AdminReviews = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Flag Confirmation */}
-      <AlertDialog open={!!flaggingReview} onOpenChange={() => setFlaggingReview(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {flaggingReview?.flagged ? "Unflag Review" : "Flag Review"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {flaggingReview?.flagged
-                ? "This review will be marked as normal."
-                : "This review will be flagged for further review or removal."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleFlagReview} className="bg-warning text-warning-foreground hover:bg-warning/90">
-              {flaggingReview?.flagged ? "Unflag" : "Flag"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       {/* Warn User Dialog */}
-      <AlertDialog open={!!warningUser} onOpenChange={() => { setWarningUser(null); setWarningMessage(""); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
-              <AlertTriangle className="h-5 w-5" />
-              Send Warning to {warningUser?.userName}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This warning will be sent to the {warningUser?.type}'s notifications and will be visible in their profile.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <Textarea
-            placeholder="Enter warning message..."
-            value={warningMessage}
-            onChange={(e) => setWarningMessage(e.target.value)}
-            className="my-4"
-            rows={4}
-          />
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSendWarning} className="bg-amber-600 text-white hover:bg-amber-700">
-              Send Warning
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Dialog open={warningDialog.open} onOpenChange={(openState) => setWarningDialog((prev) => ({ ...prev, open: openState }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              Send Warning to {warningDialog.userType === 'doctor' ? 'Doctor' : 'Patient'}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Send a formal warning to {warningDialog.userName}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Alert className="bg-amber-50 border-amber-200">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-sm text-amber-800">
+              Send a clear warning to <strong>{warningDialog.userName}</strong>. This will be visible to the user.
+            </AlertDescription>
+          </Alert>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Reason (optional)</label>
+              <select
+                className="w-full px-3 py-2 rounded-md border border-input text-sm"
+                value={warningDialog.reason}
+                onChange={(e) => setWarningDialog((prev) => ({ ...prev, reason: e.target.value }))}
+              >
+                <option value="">Select a reason...</option>
+                {warningDialog.userType === 'doctor' ? (
+                  <>
+                    <option value="high-cancellation">High Cancellation Rate</option>
+                    <option value="no-show">Frequent No-shows</option>
+                    <option value="poor-ratings">Poor Ratings</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="inappropriate-feedback">Inappropriate Feedback</option>
+                    <option value="false-information">False Information</option>
+                  </>
+                )}
+                <option value="violation">Policy Violation</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Warning Message *</label>
+              <Textarea
+                placeholder="Write a clear warning message..."
+                value={warningDialog.message}
+                onChange={(e) => setWarningDialog((prev) => ({ ...prev, message: e.target.value }))}
+                className="text-sm resize-none"
+                rows={4}
+              />
+              <div className="text-xs text-slate-500">Be specific about what needs to improve.</div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
+              onClick={() => setWarningDialog((prev) => ({ ...prev, open: false }))}
+              disabled={warningDialog.loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleSendWarning}
+              disabled={warningDialog.loading || !warningDialog.message.trim()}
+            >
+              {warningDialog.loading ? "Sending..." : "Send Warning"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

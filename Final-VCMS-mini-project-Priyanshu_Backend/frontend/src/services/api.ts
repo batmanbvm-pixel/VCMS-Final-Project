@@ -44,16 +44,38 @@ const createInstance = (): AxiosInstance => {
   inst.interceptors.response.use(
     (response) => response,
     (error) => {
+      const requestUrl = String(error?.config?.url || '');
+
       // Handle network errors
       if (!error.response) {
         // Network error or timeout
         if (error.code === 'ECONNABORTED') {
           // Timeout handled
+          error.userMessage = 'Request timed out. Please try again.';
         } else if (!navigator.onLine) {
           // Offline handled
+          error.userMessage = 'You are offline. Please check your internet connection.';
         } else {
           // Network error handled
+          error.userMessage = 'Server is not reachable. Please ensure backend is running.';
         }
+        return Promise.reject(error);
+      }
+
+      if (error.response?.status === 404) {
+        if (requestUrl.includes('/prescriptions/appointment/')) {
+          error.userMessage = 'Prescription not found for this appointment.';
+        } else if (requestUrl.includes('/prescriptions/')) {
+          error.userMessage = 'Prescription not found or deleted.';
+        } else if (requestUrl.includes('/admin/users/')) {
+          error.userMessage = 'User not found or already deleted.';
+        } else {
+          error.userMessage = error.response?.data?.message || 'Requested resource not found.';
+        }
+      }
+
+      if (error.response?.status >= 500) {
+        error.userMessage = 'Server error. Please try again in a moment.';
       }
       
       // PROMPT #81: Safety check for simultaneous token expiry during video call

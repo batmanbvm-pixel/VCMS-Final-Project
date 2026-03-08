@@ -67,9 +67,7 @@ router.post("/patients/:patientId/reject", protect, [
 router.put("/users/:userId/role", protect, changeUserRole);
 
 // PUT /users/:userId/warn - Admin: Warn user
-router.put("/users/:userId/warn", protect, [
-  check('message').notEmpty().withMessage('Warning message is required'),
-], validateRequest, warnUser);
+router.put("/users/:userId/warn", protect, warnUser);
 
 // DELETE /users/:userId - Admin: Delete user
 router.delete("/users/:userId", protect, deleteUser);

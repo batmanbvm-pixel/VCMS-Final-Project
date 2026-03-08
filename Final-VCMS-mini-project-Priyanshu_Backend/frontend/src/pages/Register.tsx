@@ -47,6 +47,7 @@
     const [otherSpecialization, setOtherSpecialization] = useState("");
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [serverError, setServerError] = useState("");
     const { register } = useAuth();
     const navigate = useNavigate();
     const { toast } = useToast();
@@ -155,6 +156,7 @@
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const { name, value } = e.target;
       setFormData((prev) => ({ ...prev, [name]: value }));
+      if (serverError) setServerError("");
       // Clear error when user starts typing
       if (errors[name]) {
         setErrors(prev => {
@@ -249,6 +251,7 @@
 
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
+      setServerError("");
 
       if (!validateForm()) {
         toast({
@@ -285,9 +288,27 @@
         });
         navigate("/login");
       } else {
+        const msg = String(result.message || "Registration failed");
+        const lowerMsg = msg.toLowerCase();
+
+        setServerError(msg);
+        setErrors((prev) => {
+          const next = { ...prev };
+          if (lowerMsg.includes('email') && (lowerMsg.includes('already') || lowerMsg.includes('exists') || lowerMsg.includes('registered'))) {
+            next.email = "This email is already registered. Please sign in or use another email.";
+          }
+          if (lowerMsg.includes('phone') && (lowerMsg.includes('already') || lowerMsg.includes('exists') || lowerMsg.includes('registered'))) {
+            next.phone = "This phone number is already registered. Please use another phone number.";
+          }
+          if (lowerMsg.includes('date of birth') || lowerMsg.includes('at least 18')) {
+            next.dateOfBirth = "You must be at least 18 years old";
+          }
+          return next;
+        });
+
         toast({
           title: "Registration failed",
-          description: result.message,
+          description: msg,
           variant: "destructive",
         });
       }
@@ -349,6 +370,12 @@
             </div>
 
             <form onSubmit={handleSubmit} noValidate className="space-y-5">
+              {serverError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="text-sm text-red-700 font-medium">{serverError}</p>
+                </div>
+              )}
+
               {/* Name row */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Star, MessageSquare, Trash2, AlertTriangle, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -44,9 +45,10 @@ const DoctorFeedback = () => {
     open: false,
     patientId: null as string | null,
     patientName: "",
+    reason: "",
+    message: "",
     loading: false,
   });
-  const [warnMessage, setWarnMessage] = useState("");
 
   const fetchFeedback = async () => {
     try {
@@ -96,21 +98,35 @@ const DoctorFeedback = () => {
   };
 
   const handleWarnPatient = async () => {
-    if (!warnDialog.patientId || !warnMessage.trim()) return;
+    if (!warnDialog.patientId || !warnDialog.message.trim()) {
+      toast({ title: "Required", description: "Please enter a warning message.", variant: "destructive" });
+      return;
+    }
+
+    const reasonLabelMap: Record<string, string> = {
+      "inappropriate-feedback": "Inappropriate Feedback",
+      "false-information": "False Information",
+      "harassment": "Harassment",
+      "violation": "Policy Violation",
+      "other": "Other",
+    };
+    const reasonLabel = warnDialog.reason ? reasonLabelMap[warnDialog.reason] || warnDialog.reason : "";
+    const composedMessage = reasonLabel
+      ? `${reasonLabel}: ${warnDialog.message.trim()}`
+      : warnDialog.message.trim();
 
     try {
       setWarnDialog(prev => ({ ...prev, loading: true }));
       
       await api.put(`/admin/users/${warnDialog.patientId}/warn`, {
-        message: warnMessage,
+        message: composedMessage,
       });
       
       toast({
         title: "Success",
         description: `Warning sent to ${warnDialog.patientName}`,
       });
-      setWarnDialog({ open: false, patientId: null, patientName: "", loading: false });
-      setWarnMessage("");
+      setWarnDialog({ open: false, patientId: null, patientName: "", reason: "", message: "", loading: false });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -130,7 +146,7 @@ const DoctorFeedback = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="container mx-auto px-4 py-6 space-y-5 max-w-7xl pb-12">
+      <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
         
         {/* Hero Header - Cyan Style */}
         <div className="rounded-xl bg-sky-500 text-white p-6 shadow-md border border-sky-300">
@@ -221,6 +237,8 @@ const DoctorFeedback = () => {
                               open: true,
                               patientId: review.patientId || "",
                               patientName: review.patientName,
+                              reason: "",
+                              message: "",
                               loading: false,
                             })}
                           >
@@ -326,46 +344,68 @@ const DoctorFeedback = () => {
       </Dialog>
 
       {/* Warn Patient Dialog */}
-      <Dialog open={warnDialog.open} onOpenChange={(open) => !open && setWarnDialog({ open: false, patientId: null, patientName: "", loading: false })}>
-        <DialogContent className="max-w-lg rounded-2xl border border-slate-200 shadow-xl">
+      <Dialog open={warnDialog.open} onOpenChange={(open) => !open && setWarnDialog({ open: false, patientId: null, patientName: "", reason: "", message: "", loading: false })}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-slate-900 font-bold flex items-center gap-2">
-              <div className="h-10 w-10 rounded-2xl bg-amber-100 flex items-center justify-center">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
-              </div>
-              Send Warning
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              Send Warning to Patient
             </DialogTitle>
-            <DialogDescription className="text-slate-600 text-base pt-2">
+            <DialogDescription className="sr-only">
               Send a formal warning to {warnDialog.patientName}
             </DialogDescription>
           </DialogHeader>
 
+          <Alert className="bg-amber-50 border-amber-200">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-sm text-amber-800">
+              Send a clear warning to <strong>{warnDialog.patientName}</strong>. This will be visible to the patient.
+            </AlertDescription>
+          </Alert>
+
           <div className="space-y-4">
-            <div>
-              <label className="text-sm font-bold text-slate-700 mb-2 block">Warning Message</label>
-              <textarea
-                value={warnMessage}
-                onChange={(e) => setWarnMessage(e.target.value)}
-                placeholder="Enter warning message..."
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Reason (optional)</label>
+              <select
+                className="w-full px-3 py-2 rounded-md border border-input text-sm"
+                value={warnDialog.reason}
+                onChange={(e) => setWarnDialog((prev) => ({ ...prev, reason: e.target.value }))}
+              >
+                <option value="">Select a reason...</option>
+                <option value="inappropriate-feedback">Inappropriate Feedback</option>
+                <option value="false-information">False Information</option>
+                <option value="harassment">Harassment</option>
+                <option value="violation">Policy Violation</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Warning Message *</label>
+              <Textarea
+                placeholder="Write a clear warning message..."
+                value={warnDialog.message}
+                onChange={(e) => setWarnDialog((prev) => ({ ...prev, message: e.target.value }))}
+                className="text-sm resize-none"
                 rows={4}
               />
+              <div className="text-xs text-slate-500">Be specific about what needs to improve.</div>
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-3">
+          <DialogFooter className="gap-2">
             <Button
               variant="outline"
-              onClick={() => { setWarnDialog({ open: false, patientId: null, patientName: "", loading: false }); setWarnMessage(""); }}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
+              onClick={() => setWarnDialog({ open: false, patientId: null, patientName: "", reason: "", message: "", loading: false })}
               disabled={warnDialog.loading}
-              className="rounded-xl border-slate-300"
             >
               Cancel
             </Button>
             <Button
+              variant="destructive"
               onClick={handleWarnPatient}
-              disabled={warnDialog.loading || !warnMessage.trim()}
-              className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white gap-2"
+              disabled={warnDialog.loading || !warnDialog.message.trim()}
             >
               {warnDialog.loading ? (
                 <>

@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Activity, LogOut, User, ArrowLeft, LayoutDashboard, Bell, Phone, Info } from "lucide-react";
+import { Activity, LogOut, User, ArrowLeft, LayoutDashboard, Bell, Phone, Info, UserCheck } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import api from "@/services/api";
@@ -22,6 +22,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [isLoading, setIsLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
   const fetchUnread = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -31,8 +32,24 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     } catch { /* ignore */ }
   }, [isAuthenticated]);
 
+  const fetchPendingApprovals = useCallback(async () => {
+    if (!isAuthenticated || user?.role !== 'admin') return;
+    try {
+      const [doctorsRes, patientsRes] = await Promise.all([
+        api.get('/admin/doctors/pending-list').catch(() => ({ data: { doctors: [] } })),
+        api.get('/admin/patients/pending').catch(() => ({ data: { patients: [] } })),
+      ]);
+      const doctors = doctorsRes.data?.doctors?.filter((d: any) => d.approvalStatus === 'pending') || [];
+      const patients = patientsRes.data?.patients?.filter((p: any) => p.approvalStatus === 'pending') || [];
+      setPendingApprovalsCount(doctors.length + patients.length);
+    } catch { /* ignore */ }
+  }, [isAuthenticated, user?.role]);
+
   // Fetch unread count on mount and when location changes (user navigates away from notifications page)
   useEffect(() => { fetchUnread(); }, [fetchUnread, location.pathname]);
+  
+  // Fetch pending approvals for admin
+  useEffect(() => { fetchPendingApprovals(); }, [fetchPendingApprovals, location.pathname]);
 
   // Real-time: increment badge on new notifications
   useEffect(() => {
@@ -61,7 +78,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   // Extract initials from name (e.g., "John Doe" -> "JD")
   const initials = user ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase() : "";
-  const roleColor = user?.role === "admin" ? "bg-gradient-to-br from-red-500 to-red-600" : user?.role === "doctor" ? "bg-gradient-to-br from-cyan-500 to-sky-600" : "bg-gradient-to-br from-sky-500 to-blue-600";
+  const roleColor = "bg-orange-700";
 
   const isDashboard = isAuthenticated && (
     location.pathname === `/${user?.role}` || location.pathname === "/"
@@ -157,40 +174,66 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             
             {/* Notification Bell */}
             {isAuthenticated && user && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="relative h-12 w-12 rounded-xl text-slate-700 hover:bg-slate-50 border border-slate-200 transition-all duration-200 hover:scale-105" 
-                onClick={() => navigate("/notifications")}
-                aria-label="Open notifications"
-                title="Open notifications"
-              >
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-[11px] text-white font-semibold shadow-lg ring-2 ring-white">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
+              <>
+                {/* Pending Approvals Badge (Admin Only) */}
+                {user.role === 'admin' && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="relative h-12 w-12 rounded-xl text-slate-700 bg-white hover:bg-amber-50 border border-amber-300 hover:border-amber-400 shadow-[0_2px_10px_rgba(245,158,11,0.18)] transition-all duration-200 hover:scale-105" 
+                    onClick={() => navigate("/admin/approvals")}
+                    aria-label="Pending approvals"
+                    title="Pending approvals"
+                  >
+                    <UserCheck className="h-5 w-5 text-amber-700 fill-amber-200/90" />
+                    {pendingApprovalsCount > 0 && (
+                      <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-amber-600 text-[11px] text-white font-semibold shadow-lg ring-2 ring-white animate-pulse">
+                        {pendingApprovalsCount > 9 ? "9+" : pendingApprovalsCount}
+                      </span>
+                    )}
+                  </Button>
                 )}
-              </Button>
+                
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="relative h-12 w-12 rounded-xl text-slate-700 bg-white hover:bg-sky-50 border border-sky-300 hover:border-sky-400 shadow-[0_2px_10px_rgba(2,132,199,0.18)] transition-all duration-200 hover:scale-105" 
+                  onClick={() => navigate("/notifications")}
+                  aria-label="Open notifications"
+                  title="Open notifications"
+                >
+                  <Bell className="h-5 w-5 text-sky-700 fill-sky-200/90" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-[11px] text-white font-semibold shadow-lg ring-2 ring-white animate-pulse">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </>
             )}
             
             {isAuthenticated && user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-12 w-12 rounded-xl transition-all duration-200 hover:scale-105 border border-slate-200" aria-label="Open account menu" title="Open account menu">
-                    <Avatar className="h-12 w-12 ring-2 ring-sky-500/30">
+                  <Button variant="ghost" className="relative h-12 w-12 rounded-xl transition-all duration-200 hover:scale-105 bg-white hover:bg-slate-50 shadow-[0_2px_10px_rgba(15,23,42,0.12)]" aria-label="Open account menu" title="Open account menu">
+                    <Avatar className="h-12 w-12">
                       <AvatarFallback className={`${roleColor} text-white text-sm font-semibold`}>
                         {initials}
                       </AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-72 p-3 rounded-2xl bg-white border-slate-200" align="end">
-                  <div className="px-4 py-4 border border-sky-200 bg-sky-50 rounded-xl mb-3">
-                    <div className="relative">
+                <DropdownMenuContent className="w-80 p-3 rounded-3xl bg-white border border-slate-200 text-slate-900 shadow-xl" align="end">
+                  <div className="px-4 py-5 border border-sky-200 bg-sky-50 rounded-2xl mb-3">
+                    <div className="relative flex flex-col items-center text-center">
+                      <Avatar className="h-16 w-16 ring-2 ring-orange-500/50 mb-3">
+                        <AvatarFallback className={`${roleColor} text-white text-2xl font-medium`}>
+                          {initials?.[0] || "U"}
+                        </AvatarFallback>
+                      </Avatar>
                       <p className="text-base font-semibold text-slate-900">{user.name}</p>
                       <p className="text-xs text-slate-600 mt-1">{user.email}</p>
-                      <span className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-600 px-3 py-1.5 text-[11px] font-semibold uppercase text-white">
+                      <span className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-orange-700 px-3 py-1.5 text-[11px] font-semibold uppercase text-white">
                         <div className="h-2 w-2 rounded-full bg-white"></div>
                         {user.role}
                       </span>
@@ -199,14 +242,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <DropdownMenuSeparator className="my-3 bg-slate-200" />
                   <DropdownMenuItem 
                     onClick={() => navigate(`/${user.role}`)}
-                    className="rounded-xl px-4 py-3 cursor-pointer text-slate-700 hover:text-sky-600 hover:bg-sky-50 font-semibold transition-all"
+                    className="rounded-xl px-4 py-3 cursor-pointer text-slate-700 hover:text-sky-700 hover:bg-sky-50 font-semibold transition-all"
                   >
                     <LayoutDashboard className="mr-3 h-5 w-5" />
                     Dashboard
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     onClick={() => navigate("/profile")}
-                    className="rounded-xl px-4 py-3 cursor-pointer text-slate-700 hover:text-sky-600 hover:bg-sky-50 font-semibold transition-all"
+                    className="rounded-xl px-4 py-3 cursor-pointer text-slate-700 hover:text-sky-700 hover:bg-sky-50 font-semibold transition-all"
                   >
                     <User className="mr-3 h-5 w-5" />
                     My Profile
@@ -214,9 +257,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   {user.role !== "admin" && (
                     <DropdownMenuItem 
                       onClick={() => navigate("/notifications")}
-                      className="rounded-xl px-4 py-3 cursor-pointer text-slate-700 hover:text-sky-600 hover:bg-sky-50 font-semibold transition-all"
+                      className="rounded-xl px-4 py-3 cursor-pointer text-slate-700 hover:text-sky-700 hover:bg-sky-50 font-semibold transition-all"
                     >
-                      <Bell className="mr-3 h-5 w-5" />
+                      <Bell className="mr-3 h-5 w-5 text-sky-600 fill-sky-200" />
                       Notifications
                       {unreadCount > 0 && (
                         <span className="ml-auto flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-xs font-semibold text-white shadow-lg">
@@ -228,7 +271,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <DropdownMenuSeparator className="my-3 bg-slate-200" />
                   <DropdownMenuItem 
                     onClick={handleLogout} 
-                    className="rounded-xl px-4 py-3 text-red-600 hover:bg-red-50 cursor-pointer font-semibold transition-all"
+                    className="rounded-xl px-4 py-3 text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer font-semibold transition-all"
                   >
                     <LogOut className="mr-3 h-5 w-5" />
                     Logout

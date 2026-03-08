@@ -32,30 +32,31 @@ const connectDB = async (retries = 5) => {
     };
     
     await mongoose.connect(mongoUri, connectionOptions);
+    console.log(`✅ MongoDB Connected: ${mongoose.connection.host}`);
     
     // Connection event handlers
     mongoose.connection.on("disconnected", () => {
-      // Disconnection handled
+      console.log("⚠️ MongoDB Disconnected");
     });
     
     mongoose.connection.on("error", (err) => {
-      // Connection error handled
+      console.error("❌ MongoDB connection error:", err.message);
     });
     
     mongoose.connection.on("reconnected", () => {
-      // Reconnection handled
+      console.log("🔄 MongoDB Reconnected");
     });
     
     return mongoose.connection;
   } catch (error) {
-    // Database connection error handled
+    console.error(`❌ MongoDB Connection Error: ${error.message}`);
     
     if (retries > 0) {
-      // Retry scheduled
+      console.log(`⏳ Retrying connection... (${retries} attempts remaining)`);
       await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds before retry
       return connectDB(retries - 1);
     } else {
-      // Retries exhausted
+      console.error("💥 MongoDB connection failed after all retries. Exiting...");
       process.exit(1);
     }
   }

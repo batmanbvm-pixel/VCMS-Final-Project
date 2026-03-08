@@ -318,11 +318,29 @@ const getDoctorProfileCompletion = async (req, res) => {
     const missing = getMissingFields(doctor);
     const canGoOnline = canDoctorGoOnline(doctor);
 
+    // Enforce rule: only approved + 100% complete doctors can stay online
+    if (!canGoOnline && (doctor.onlineStatus === 'online' || doctor.available === true)) {
+      doctor.onlineStatus = 'offline';
+      doctor.available = false;
+    }
+
+    // Keep derived fields in sync
+    const shouldBeApprovedAndComplete = canGoOnline;
+    if (doctor.profileCompletionPercentage !== completion) {
+      doctor.profileCompletionPercentage = completion;
+    }
+    if (doctor.isApprovedAndComplete !== shouldBeApprovedAndComplete) {
+      doctor.isApprovedAndComplete = shouldBeApprovedAndComplete;
+    }
+
+    await doctor.save();
+
     res.json({
       success: true,
       profileCompletionPercentage: completion,
       missingFields: missing,
       canGoOnline,
+      approvalStatus: doctor.approvalStatus,
       isApprovedAndComplete: doctor.isApprovedAndComplete,
       onlineStatus: doctor.onlineStatus,
     });

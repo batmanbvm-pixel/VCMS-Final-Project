@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
 import { CalendarDays, Clock, MapPin, Stethoscope, IndianRupee, Video, Trash2, AlertTriangle, FileText, CheckCircle, XCircle, Activity, Star, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -124,17 +124,17 @@ const PatientAppointments = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="container mx-auto px-4 py-6 space-y-6 max-w-7xl pb-12">
+      <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
 
       {/* ── Hero Header ────────────────────────────────────── */}
-      <div className="rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-sm">
-        <div className="px-6 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5 bg-gradient-to-r from-white via-sky-50/40 to-cyan-50/50">
+      <div className="rounded-xl overflow-hidden bg-sky-500 border border-sky-300 shadow-md text-white">
+        <div className="px-6 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div className="space-y-2">
-            <p className="text-[11px] font-bold text-sky-600 uppercase tracking-widest flex items-center gap-2">
+            <p className="text-[11px] font-bold text-white/90 uppercase tracking-widest flex items-center gap-2">
               <CalendarDays className="h-4 w-4" /> My Appointments
             </p>
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Track and manage all your appointments</h1>
-            <p className="text-slate-600 text-sm">View status, join consultations, and manage your healthcare.</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Track and manage all your appointments</h1>
+            <p className="text-sky-100 text-sm">View status, join consultations, and manage your healthcare.</p>
           </div>
         </div>
       </div>
@@ -200,9 +200,9 @@ const PatientAppointments = () => {
             {tab !== "all" && (
               <Button 
                 size="sm" 
-                variant="outline" 
+                variant="outline"
                 onClick={() => setTab("all")}
-                className="mt-2 rounded-xl border-slate-300 font-semibold hover:bg-sky-50 hover:text-sky-600 hover:border-sky-300 transition-all duration-200 text-xs"
+                className="mt-2 rounded-xl bg-slate-100 border-slate-300 text-slate-800 font-semibold hover:bg-slate-200 hover:text-sky-700 hover:border-sky-300 transition-all duration-200 text-xs"
               >
                 Show All Appointments
               </Button>
@@ -213,16 +213,17 @@ const PatientAppointments = () => {
         <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
             <Table className="min-w-[980px]">
+              <TableCaption className="sr-only">Patient appointments table with doctor, schedule, status, prescription, and actions.</TableCaption>
               <TableHeader>
-                <TableRow className="bg-gradient-to-r from-slate-100 to-slate-50 border-b-2 border-slate-300">
-                  <TableHead className="text-slate-900 font-bold py-4 text-xs">Doctor</TableHead>
-                  <TableHead className="text-slate-900 font-bold py-4 text-xs">Specialization</TableHead>
-                  <TableHead className="text-slate-900 font-bold py-4 text-xs text-center">Schedule</TableHead>
-                  <TableHead className="text-slate-900 font-bold py-4 text-xs">Location</TableHead>
-                  <TableHead className="text-slate-900 font-bold py-4 text-xs text-center">Fee</TableHead>
-                  <TableHead className="text-slate-900 font-bold py-4 text-xs text-center">Status</TableHead>
-                  <TableHead className="text-slate-900 font-bold py-4 text-xs text-center">Prescription</TableHead>
-                  <TableHead className="text-slate-900 font-bold py-4 text-xs text-center">Actions</TableHead>
+                <TableRow className="bg-slate-50 border-b border-slate-200">
+                  <TableHead scope="col" className="text-slate-700 font-semibold py-3 text-xs uppercase tracking-wide">Doctor</TableHead>
+                  <TableHead scope="col" className="text-slate-700 font-semibold py-3 text-xs uppercase tracking-wide">Specialization</TableHead>
+                  <TableHead scope="col" className="text-slate-700 font-semibold py-3 text-xs uppercase tracking-wide text-center">Schedule</TableHead>
+                  <TableHead scope="col" className="text-slate-700 font-semibold py-3 text-xs uppercase tracking-wide">Location</TableHead>
+                  <TableHead scope="col" className="text-slate-700 font-semibold py-3 text-xs uppercase tracking-wide text-center">Fee</TableHead>
+                  <TableHead scope="col" className="text-slate-700 font-semibold py-3 text-xs uppercase tracking-wide text-center">Status</TableHead>
+                  <TableHead scope="col" className="text-slate-700 font-semibold py-3 text-xs uppercase tracking-wide text-center">Prescription</TableHead>
+                  <TableHead scope="col" className="text-slate-700 font-semibold py-3 text-xs uppercase tracking-wide text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -236,33 +237,33 @@ const PatientAppointments = () => {
                   return (
                     <TableRow 
                       key={apt._id} 
-                      className={`transition-all duration-200 hover:bg-sky-50/70 hover:shadow-sm border-slate-200 ${
+                      className={`transition-colors border-slate-200 ${
                         index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
-                      }`}
+                      } hover:bg-slate-50`}
                     >
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 align-middle">
                         <div className="flex items-center gap-2">
                           <div className={`h-9 w-9 rounded-full flex items-center justify-center text-white font-bold shadow-sm text-xs ${
-                            isCompleted ? "bg-gradient-to-br from-sky-500 to-sky-600" :
-                            isCancelled ? "bg-gradient-to-br from-red-500 to-red-600" :
-                            canJoin ? "bg-gradient-to-br from-sky-500 to-sky-600" :
-                            "bg-gradient-to-br from-sky-600 to-primary"
+                            isCompleted ? "bg-sky-600" :
+                            isCancelled ? "bg-red-600" :
+                            canJoin ? "bg-sky-600" :
+                            "bg-sky-600"
                           }`}>
                             {apt.doctorName.split(' ').map(n => n[0]).join('').slice(0, 2)}
                           </div>
                           <div>
-                            <div className="font-semibold text-slate-900 text-xs">{apt.doctorName}</div>
+                            <div className="font-semibold text-slate-900 text-sm">{apt.doctorName}</div>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="py-3">
-                        <span className="inline-block bg-sky-50 text-sky-700 border border-sky-200 font-medium px-2 py-0.5 rounded text-xs">
+                      <TableCell className="py-3 align-middle">
+                        <span className="inline-block bg-sky-50 text-sky-700 border border-sky-200 font-medium px-2.5 py-1 rounded-md text-xs">
                           {apt.specialization}
                         </span>
                       </TableCell>
-                      <TableCell className="py-3 text-center">
+                      <TableCell className="py-3 text-center align-middle">
                         <div className="flex flex-col items-center gap-0.5 text-xs">
-                          <div className="font-bold text-slate-900 flex items-center gap-0.5">
+                          <div className="font-semibold text-slate-900 flex items-center gap-0.5">
                             <CalendarDays className="w-3 h-3 text-sky-600" />
                             {apt.date}
                           </div>
@@ -272,41 +273,41 @@ const PatientAppointments = () => {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 align-middle">
                         <div className="text-xs text-slate-600">
                           {apt.location ? formatLocation(apt.location) : "—"}
                         </div>
                       </TableCell>
-                      <TableCell className="py-3 text-center">
+                      <TableCell className="py-3 text-center align-middle">
                         {apt.consultationFee ? (
-                          <span className="inline-flex items-center gap-0.5 text-xs font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                          <span className="inline-flex items-center gap-0.5 text-xs font-bold text-sky-700 bg-sky-50 px-2 py-1 rounded-md border border-sky-200">
                             <IndianRupee className="h-2.5 w-2.5" />
                             ₹{apt.consultationFee}
                           </span>
                         ) : "—"}
                       </TableCell>
-                      <TableCell className="py-3 text-center">
+                      <TableCell className="py-3 text-center align-middle">
                         <StatusBadge status={apt.status} />
                       </TableCell>
-                      <TableCell className="py-3 text-center">
+                      <TableCell className="py-3 text-center align-middle">
                         {rx ? (
-                          <div className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 px-2 py-0.5 rounded text-xs border border-sky-200">
+                          <div className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 px-2.5 py-1 rounded-md text-xs border border-sky-200">
                             <div className="w-1.5 h-1.5 bg-sky-500 rounded-full"></div>
                             <span className="font-bold">Given</span>
                           </div>
                         ) : (
-                          <div className="inline-flex items-center gap-1 bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded text-xs border border-cyan-200">
+                          <div className="inline-flex items-center gap-1 bg-cyan-50 text-cyan-700 px-2.5 py-1 rounded-md text-xs border border-cyan-200">
                             <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>
                             <span className="font-bold">Not Given</span>
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 align-middle">
                         <div className="flex justify-center gap-1.5 flex-wrap">
                           {canJoin && (
                             <Button
                               size="sm"
-                              className="h-7 text-xs gap-0.5 bg-sky-500 hover:bg-sky-600 text-white shadow-sm font-semibold transition-all duration-200 hover:scale-105"
+                              className="h-8 rounded-lg text-xs gap-1 bg-sky-500 hover:bg-sky-600 text-white shadow-sm font-semibold"
                               onClick={() => navigate(`/video/${apt._id}`)}
                             >
                               <Video className="h-3 w-3" /> Join
@@ -315,27 +316,35 @@ const PatientAppointments = () => {
                           {isCompleted && (
                             <Button
                               size="sm"
-                              variant="outline"
-                              className="h-7 text-xs gap-0.5 border-sky-200 text-sky-700 hover:bg-sky-50 font-semibold"
+                              className="h-8 rounded-lg text-xs gap-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold"
                               onClick={() => navigate(`/doctor-feedback?appointmentId=${apt._id}`)}
                             >
                               <Star className="h-3 w-3 fill-sky-400" />
                               Rate
                             </Button>
                           )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs gap-0.5 border-sky-200 text-sky-600 hover:bg-sky-50 font-semibold transition-all duration-200 hover:scale-105"
-                            onClick={() => navigate(`/prescriptions/appointment/${apt._id}`)}
-                          >
-                            <FileText className="h-3 w-3" /> Rx
-                          </Button>
-                          {!isCompleted && !isCancelled && (
+                          {rx ? (
+                            <Button
+                              size="sm"
+                              className="h-8 rounded-lg text-xs gap-1 bg-sky-600 hover:bg-sky-700 text-white font-semibold"
+                              onClick={() => navigate(`/prescriptions/${rx._id || rx.id}`)}
+                            >
+                              <FileText className="h-3 w-3" /> Rx
+                            </Button>
+                          ) : (
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-8 text-xs gap-1 border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-all duration-200 hover:scale-105"
+                              disabled
+                              className="h-8 rounded-lg text-xs gap-1 border-slate-300 text-slate-500"
+                            >
+                              <FileText className="h-3 w-3" /> No Rx
+                            </Button>
+                          )}
+                          {!isCompleted && !isCancelled && (
+                            <Button
+                              size="sm"
+                              className="h-8 rounded-lg text-xs gap-1 bg-red-600 hover:bg-red-700 text-white font-semibold"
                               onClick={() => setCancelDialog({ open: true, appointmentId: apt._id, reason: "", loading: false })}
                             >
                               <Trash2 className="h-3 w-3" /> Cancel
@@ -386,7 +395,7 @@ const PatientAppointments = () => {
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setCancelDialog({ open: false, appointmentId: null, reason: "", loading: false })}>
+            <Button variant="outline" className="bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300" onClick={() => setCancelDialog({ open: false, appointmentId: null, reason: "", loading: false })}>
               Keep Appointment
             </Button>
             <Button variant="destructive" onClick={handleCancelAppointment} disabled={cancelDialog.loading}>

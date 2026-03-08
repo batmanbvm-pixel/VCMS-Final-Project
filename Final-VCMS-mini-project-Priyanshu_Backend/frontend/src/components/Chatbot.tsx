@@ -301,7 +301,8 @@ const Chatbot = () => {
         const doctor = doctors.find(d => d._id === value);
         if (doctor) {
           setSelectedDoctor(doctor);
-          addMessage("bot", `Great! You selected Dr. ${doctor.name} (${doctor.specialization}). \n\nFee: ₹${doctor.consultationFee || 500}\nLocation: ${doctor.location || 'N/A'}`);
+          const locationText = typeof doctor.location === 'string' ? doctor.location : (doctor.location?.city || 'Available online');
+          addMessage("bot", `Great! You selected Dr. ${doctor.name} (${doctor.specialization}). \n\nFee: ₹${doctor.consultationFee || 500}\nLocation: ${locationText}`);
           addMessage("bot", "Now, please select a date:", [], "calendar");
           setStep("date");
         }

@@ -39,7 +39,7 @@ const demoAccounts = [
     isApproved: true
   },
   {
-    name: 'Dr. Alice Johnson',
+    name: 'Alice Johnson',
     email: 'alice@gmail.com',
     password: 'Test@1234',
     role: 'doctor',
@@ -54,7 +54,7 @@ const demoAccounts = [
     bio: 'Experienced general physician with 10 years of practice. Specialized in treating common ailments and preventive care.'
   },
   {
-    name: 'Dr. Rudra Patel',
+    name: 'Rudra Patel',
     email: 'rudra12@gmail.com',
     password: 'Preet@2412',
     role: 'doctor',
@@ -69,7 +69,7 @@ const demoAccounts = [
     bio: 'Board-certified cardiologist with expertise in preventive cardiology and management of cardiovascular diseases.'
   },
   {
-    name: 'Dr. Naruto Uzumaki',
+    name: 'Naruto Uzumaki',
     email: 'naruto1821uzumaki@gmail.com',
     password: 'Preet@2412',
     role: 'doctor',

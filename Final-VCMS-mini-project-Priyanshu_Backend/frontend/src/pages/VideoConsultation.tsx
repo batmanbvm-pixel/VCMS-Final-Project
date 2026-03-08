@@ -1183,11 +1183,11 @@ const VideoConsultation = () => {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <span className="text-slate-600 font-medium">Patient:</span>
-                    <p className="text-slate-900">{appointment?.patientId?.name || appointment?.patientName || "N/A"}</p>
+                    <p className="text-slate-900">{appointment?.patientId?.name || appointment?.patientName || "Patient"}</p>
                   </div>
                   <div>
                     <span className="text-slate-600 font-medium">Doctor:</span>
-                    <p className="text-slate-900">{appointment?.doctorId?.name || appointment?.doctorName || "N/A"}</p>
+                    <p className="text-slate-900">{appointment?.doctorId?.name || appointment?.doctorName || "Doctor"}</p>
                   </div>
                   <div>
                     <span className="text-slate-600 font-medium">Date:</span>

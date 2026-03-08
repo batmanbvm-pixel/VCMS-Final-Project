@@ -67,6 +67,27 @@ const appointmentSchema = new mongoose.Schema(
 			type: Boolean,
 			default: false,
 		},
+		feedback: {
+			rating: {
+				type: Number,
+				min: 1,
+				max: 5,
+			},
+			comment: {
+				type: String,
+			},
+			createdAt: {
+				type: Date,
+			},
+		},
+		paymentStatus: {
+			type: String,
+			enum: ["pending", "paid", "failed"],
+			default: "pending",
+		},
+		consultationFee: {
+			type: Number,
+		},
 	},
 	{ timestamps: true }
 );

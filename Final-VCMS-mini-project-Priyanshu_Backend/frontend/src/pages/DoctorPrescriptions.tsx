@@ -77,9 +77,9 @@ export const DoctorPrescriptions = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-primary/5 container mx-auto px-4 py-6 space-y-6 max-w-7xl pb-12">
+    <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-primary/5 container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
       {/* Header */}
-      <div className="rounded-2xl bg-gradient-to-r from-primary via-primary/90 to-blue-600 p-6 text-white shadow-xl">
+      <div className="rounded-xl bg-sky-500 p-6 text-white shadow-md border border-sky-300">
         <div className="flex items-center gap-3 mb-2">
           <Pill className="h-8 w-8" />
           <h1 className="text-3xl font-bold">My Prescriptions</h1>
@@ -108,6 +108,15 @@ export const DoctorPrescriptions = () => {
                 className="pl-10"
               />
             </div>
+            {searchTerm.trim() && (
+              <Button
+                variant="outline"
+                onClick={() => setSearchTerm("")}
+                className="text-red-700 border-red-300 bg-red-50 hover:bg-red-100"
+              >
+                Clear Filters
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>

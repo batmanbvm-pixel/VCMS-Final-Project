@@ -18,7 +18,7 @@ const notificationSchema = new mongoose.Schema(
 		},
 		type: {
 			type: String,
-			enum: ["appointment", "prescription", "system", "chat", "medical-history", "doctor-approval", "admin-warning"],
+			enum: ["appointment", "prescription", "system", "chat", "medical-history", "doctor-approval", "admin-warning", "warning", "approval", "contact"],
 			default: "system",
 			index: true,
 		},

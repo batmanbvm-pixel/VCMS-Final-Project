@@ -53,6 +53,21 @@ interface ClinicContextType {
   fetchPrescriptions: () => Promise<void>;
 }
 
+const normalizeId = (value: any): string => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (typeof value === "object") {
+    if (value._id) return normalizeId(value._id);
+    if (value.id) return normalizeId(value.id);
+    if (typeof value.toString === "function") {
+      const raw = value.toString();
+      if (raw && raw !== "[object Object]") return raw;
+    }
+  }
+  return String(value);
+};
+
 // Helper function to map DB status to UI status
 const mapStatusDbToUI = (dbStatus: string): Appointment["status"] => {
   const normalized = String(dbStatus || "").trim().toLowerCase();
@@ -88,13 +103,13 @@ const formatDoctorName = (name?: string) => {
 // Helper function to map appointment from DB to UI format
 const mapAppointmentDbToUI = (dbApt: any): Appointment => {
   return {
-    id: dbApt._id?.toString() || dbApt.id,
-    _id: dbApt._id?.toString(),
-    patientId: dbApt.patientId?._id?.toString() || dbApt.patientId,
+    id: normalizeId(dbApt._id || dbApt.id),
+    _id: normalizeId(dbApt._id || dbApt.id),
+    patientId: normalizeId(dbApt.patientId?._id || dbApt.patientId),
     patientName: dbApt.patientId?.name || "Unknown",
     patientAge: dbApt.patientId?.age,
     patientMedicalHistory: dbApt.patientId?.medicalHistory,
-    doctorId: dbApt.doctorId?._id?.toString() || dbApt.doctorId,
+    doctorId: normalizeId(dbApt.doctorId?._id || dbApt.doctorId),
     doctorName: formatDoctorName(dbApt.doctorId?.name),
     specialization: dbApt.doctorId?.specialization || "General",
     location: dbApt.doctorId?.location,
@@ -113,12 +128,12 @@ const mapPrescriptionDbToUI = (dbRx: any): Prescription => {
   // Get first medication for display (since DB has array)
   const firstMed = dbRx.medications?.[0] || {};
   return {
-    id: dbRx._id?.toString() || dbRx.id,
-    _id: dbRx._id?.toString(),
-    appointmentId: dbRx.appointmentId?._id?.toString() || dbRx.appointmentId,
-    doctorId: dbRx.doctorId?._id?.toString() || dbRx.doctorId,
+    id: normalizeId(dbRx._id || dbRx.id),
+    _id: normalizeId(dbRx._id || dbRx.id),
+    appointmentId: normalizeId(dbRx.appointmentId?._id || dbRx.appointmentId),
+    doctorId: normalizeId(dbRx.doctorId?._id || dbRx.doctorId),
     doctorName: formatDoctorName(dbRx.doctorId?.name),
-    patientId: dbRx.patientId?._id?.toString() || dbRx.patientId,
+    patientId: normalizeId(dbRx.patientId?._id || dbRx.patientId),
     patientName: dbRx.patientId?.name || "Unknown",
     date: new Date(dbRx.createdAt || dbRx.date).toISOString().split("T")[0],
     medicineName: firstMed.name || "",
@@ -135,41 +150,54 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
 
-  // Fetch appointments from backend
-  const fetchAppointments = useCallback(async () => {
-    try {
-      const res = await api.get('/appointments', { params: { limit: 1000 } });
-      const apts = res.data.appointments || res.data.data || [];
-      
-      if (Array.isArray(apts)) {
-        const mappedApts = apts.map(mapAppointmentDbToUI);
-        setAppointments(mappedApts);
-      }
-    } catch (err) {
-      setAppointments([]);
-    }
-  }, []);
-
   // Fetch prescriptions from backend
   const fetchPrescriptions = useCallback(async () => {
     try {
       const res = await api.get('/prescriptions', { params: { limit: 1000 } });
-      const rxs = res.data.prescriptions || res.data.data || [];
-      
+      const rxs = res.data.prescriptions || res.data.data || res.data?.result?.prescriptions || [];
+
       if (Array.isArray(rxs)) {
-        const mappedRxs = rxs.map(mapPrescriptionDbToUI);
-        setPrescriptions(mappedRxs);
+        const mappedRxs = rxs
+          .map(mapPrescriptionDbToUI)
+          .filter((rx) => !!rx.id && !!rx.appointmentId);
+
+        const deduped = Array.from(
+          new Map(mappedRxs.map((rx) => [`${rx.id}:${rx.appointmentId}`, rx])).values()
+        );
+
+        setPrescriptions(deduped);
       }
     } catch (err) {
       setPrescriptions([]);
     }
   }, []);
 
+  // Fetch appointments from backend
+  const fetchAppointments = useCallback(async () => {
+    try {
+      const res = await api.get('/appointments', { params: { limit: 1000 } });
+      const apts = res.data.appointments || res.data.data || [];
+
+      if (Array.isArray(apts)) {
+        const mappedApts = apts.map(mapAppointmentDbToUI);
+        setAppointments(mappedApts);
+      }
+
+      // Keep prescription badges/labels in sync across all appointment UIs
+      await fetchPrescriptions();
+    } catch (err) {
+      setAppointments([]);
+    }
+  }, [fetchPrescriptions]);
+
   // Fetch data on mount and when user changes
   useEffect(() => {
     if (user) {
       fetchAppointments();
       fetchPrescriptions();
+    } else {
+      setAppointments([]);
+      setPrescriptions([]);
     }
   }, [user, fetchAppointments, fetchPrescriptions]);
 
@@ -293,6 +321,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (res.status === 201) {
         await fetchPrescriptions();
+        await fetchAppointments();
         return { success: true, message: 'Prescription created' };
       }
       return { success: false, message: 'Failed to create prescription' };
@@ -303,7 +332,12 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [fetchPrescriptions]);
 
   const getPrescriptionByAppointment = useCallback(
-    (appointmentId: string) => prescriptions.find((p) => p.appointmentId === appointmentId),
+    (appointmentId: string) => {
+      const normalizedAppointmentId = normalizeId(appointmentId);
+      if (!normalizedAppointmentId) return undefined;
+
+      return prescriptions.find((p) => normalizeId(p.appointmentId) === normalizedAppointmentId);
+    },
     [prescriptions]
   );
 

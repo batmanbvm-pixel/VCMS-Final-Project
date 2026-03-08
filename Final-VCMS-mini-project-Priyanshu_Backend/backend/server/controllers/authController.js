@@ -114,13 +114,28 @@ exports.registerUser = async (req, res) => {
       if (!hasLetterRegex.test(lastName)) return res.status(400).json({ message: "Last name must include at least one letter" });
     }
 
-    // Check if user already exists (use normalized email)
-    const userExists = await User.findOne({ 
-      $or: [{ email: emailLower }, { phone: phone?.replace(/\D/g, '') }] 
-    });
+    // Check if user already exists (no need to check isDeleted since we now hard delete)
+    const normalizedPhone = phone?.replace(/\D/g, '');
+    
+    const [emailExists, phoneExists] = await Promise.all([
+      User.findOne({ email: emailLower }).select('_id'),
+      User.findOne({ phone: normalizedPhone }).select('_id'),
+    ]);
 
-    if (userExists) {
-      return res.status(400).json({ message: "User with this email or phone already exists" });
+    if (emailExists) {
+      return res.status(400).json({
+        code: "REGISTER_EMAIL_EXISTS",
+        field: "email",
+        message: "This email is already registered. Please sign in or use another email.",
+      });
+    }
+
+    if (phoneExists) {
+      return res.status(400).json({
+        code: "REGISTER_PHONE_EXISTS",
+        field: "phone",
+        message: "This phone number is already registered. Please use another phone number.",
+      });
     }
 
     // Hash password
@@ -160,7 +175,7 @@ exports.registerUser = async (req, res) => {
       username: generatedUsername,
       email: emailLower,
       password: hashedPassword,
-      phone: phone?.replace(/\D/g, ''),
+      phone: normalizedPhone,
       firstName,
       lastName,
       role: role || 'patient',
@@ -196,6 +211,37 @@ exports.registerUser = async (req, res) => {
       }
     }
 
+    // Notify admins about new pending approval request
+    try {
+      const Notification = require('../models/Notification');
+      const socketHandler = require('../utils/socketHandler');
+      const admins = await User.find({ role: 'admin', isDeleted: { $ne: true } }).select('_id').lean();
+
+      if (admins.length > 0) {
+        const message = `New ${String(user.role || 'user')} registration from ${user.name || user.email} is awaiting approval.`;
+        const notificationsPayload = admins.map((adminUser) => ({
+          userId: adminUser._id,
+          title: 'New Approval Request',
+          message,
+          type: 'approval',
+          from: user._id,
+          link: '/admin/approvals',
+          priority: 'high',
+          data: {
+            pendingUserId: user._id,
+            pendingRole: user.role,
+          },
+        }));
+
+        const created = await Notification.insertMany(notificationsPayload, { ordered: false });
+        created.forEach((notif) => {
+          socketHandler.emitToUser(String(notif.userId), 'notification', notif.toObject ? notif.toObject() : notif);
+        });
+      }
+    } catch (notifyError) {
+      // Notification error handled
+    }
+
     // Do not return an access token for newly registered users until admin approves them.
     res.status(201).json({
       message: "Registration submitted. Awaiting admin approval.",
@@ -212,9 +258,17 @@ exports.registerUser = async (req, res) => {
     
     // Handle MongoDB duplicate key error
     if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      return res.status(400).json({ 
-        message: `A user with this ${field} already exists` 
+      const field = Object.keys(error.keyPattern || {})[0] || 'field';
+      const duplicateField = field === 'email' ? 'email' : field === 'phone' ? 'phone' : field;
+      return res.status(400).json({
+        code: duplicateField === 'email' ? 'REGISTER_EMAIL_EXISTS' : duplicateField === 'phone' ? 'REGISTER_PHONE_EXISTS' : 'REGISTER_DUPLICATE',
+        field: duplicateField,
+        message:
+          duplicateField === 'email'
+            ? "This email is already registered. Please sign in or use another email."
+            : duplicateField === 'phone'
+              ? "This phone number is already registered. Please use another phone number."
+              : `A user with this ${duplicateField} already exists`,
       });
     }
     
@@ -605,9 +659,12 @@ exports.sendEmailOtp = async (req, res) => {
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
-    const existingUser = await User.findOne({ email: normalizedEmail });
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+      $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
+    });
     if (!existingUser) {
-      return res.status(404).json({ message: "No account found with this email" });
+      return res.status(404).json({ message: "No active account found with this email" });
     }
 
     const otp = await sendEmailOtpCode(normalizedEmail);
@@ -728,9 +785,12 @@ exports.resetPassword = async (req, res) => {
     }
 
     // Find user by phone
-    const user = await User.findOne({ phone: cleanPhone });
+    const user = await User.findOne({
+      phone: cleanPhone,
+      $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
+    });
     if (!user) {
-      return res.status(404).json({ message: "User not found with this phone number" });
+      return res.status(404).json({ message: "No active account found with this phone number" });
     }
 
     // Update password
@@ -787,9 +847,12 @@ exports.resetPasswordEmail = async (req, res) => {
       return res.status(400).json({ message: "OTP has expired. Please request a new one." });
     }
 
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({
+      email: normalizedEmail,
+      $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }],
+    });
     if (!user) {
-      return res.status(404).json({ message: "User not found with this email" });
+      return res.status(404).json({ message: "No active account found with this email" });
     }
 
     const salt = await bcrypt.genSalt(10);

@@ -695,11 +695,13 @@ const cancelAppointment = async (req, res) => {
       return res.status(404).json({ message: 'Appointment not found' });
     }
 
-    // Allow patient to cancel or doctor to cancel
+    // Allow patient, doctor, or admin to cancel
+    const normalizedRole = String(req.user.role || '').trim().toLowerCase();
     const isPatient = appointment.patientId.toString() === req.user._id.toString();
     const isDoctor = appointment.doctorId.toString() === req.user._id.toString();
+    const isAdmin = normalizedRole === 'admin';
 
-    if (!isPatient && !isDoctor) {
+    if (!isPatient && !isDoctor && !isAdmin) {
       return res.status(403).json({ message: 'Forbidden' });
     }
 
@@ -711,7 +713,7 @@ const cancelAppointment = async (req, res) => {
       return res.status(400).json({ message: 'Cannot cancel completed appointment' });
     }
 
-    const cancellationReason = reason || (isPatient ? 'Patient cancelled' : 'Doctor cancelled');
+    const cancellationReason = reason || (isPatient ? 'Patient cancelled' : isDoctor ? 'Doctor cancelled' : 'Admin cancelled');
 
     appointment.status = 'cancelled';
     appointment.notes = cancellationReason;
@@ -720,7 +722,7 @@ const cancelAppointment = async (req, res) => {
     // Notify the other party
     try {
       const recipientId = isPatient ? appointment.doctorId : appointment.patientId;
-      const notifTitle = isPatient ? 'Appointment Cancelled by Patient' : 'Appointment Cancelled';
+      const notifTitle = isPatient ? 'Appointment Cancelled by Patient' : isDoctor ? 'Appointment Cancelled by Doctor' : 'Appointment Cancelled by Admin';
       const notifMsg = isPatient
         ? `${req.user.name} cancelled the appointment. Reason: ${cancellationReason}`
         : `${req.user.name} cancelled the appointment. Reason: ${cancellationReason}`;
