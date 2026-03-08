@@ -184,6 +184,10 @@ const router = createBrowserRouter([
     ),
   },
   {
+    path: "/contact",
+    element: <Navigate to="/contact-us" replace />,
+  },
+  {
     path: "/contact-us",
     element: (
       <AuthProvider>
