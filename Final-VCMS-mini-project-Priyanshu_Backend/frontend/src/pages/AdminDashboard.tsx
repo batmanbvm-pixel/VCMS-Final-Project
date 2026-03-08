@@ -66,10 +66,17 @@ interface AdminReviewItem {
 const COLORS = ["#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6"];
 
 const AdminDashboard = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { socket } = useSocket();
+
+  // Redirect if not authenticated or not an admin
+  useEffect(() => {
+    if (!isAuthenticated || !user || user.role !== "admin") {
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
   const [stats, setStats] = useState<Stats>({
     totalUsers: 0,
     totalDoctors: 0,

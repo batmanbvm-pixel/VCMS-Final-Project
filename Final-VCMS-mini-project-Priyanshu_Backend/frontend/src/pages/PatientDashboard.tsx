@@ -77,10 +77,17 @@ const SYMPTOM_TO_SPECIALIZATION: Record<string, string[]> = {
 };
 
 const PatientDashboard = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect if not authenticated or not a patient
+  useEffect(() => {
+    if (!isAuthenticated || !user || user.role !== "patient") {
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
   const { appointments, bookAppointment, getPrescriptionByAppointment, cancelAppointment, clearCancelledAppointments, isSlotBooked, fetchAppointments } = useClinic();
   const { socket } = useSocket();
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   // Doctors state
@@ -594,7 +601,7 @@ const PatientDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-slate-50/50 to-sky-50/30">
-      <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
+      <div className="container mx-auto px-6 py-8 space-y-6 max-w-7xl pb-12">
 
       {/* ── Hero Header ─────────────────────────────────────────────── */}
       <div className="rounded-xl overflow-hidden bg-sky-500 border border-sky-300 shadow-md text-white">

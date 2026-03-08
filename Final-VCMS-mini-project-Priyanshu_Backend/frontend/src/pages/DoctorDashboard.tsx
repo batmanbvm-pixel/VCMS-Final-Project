@@ -28,11 +28,18 @@ interface DoctorFeedback {
 }
 
 const DoctorDashboard = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { appointments, acceptAppointment, rejectAppointment, updateAppointmentStatus, addPrescription, fetchAppointments, getPrescriptionByAppointment } = useClinic();
   const { socket } = useSocket();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Redirect if not authenticated or not a doctor
+  useEffect(() => {
+    if (!isAuthenticated || !user || user.role !== "doctor") {
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
 
   const today = new Date().toISOString().split("T")[0];
   const normalizedStatus = (status?: string) => (status || "").toLowerCase();
@@ -271,6 +278,7 @@ const DoctorDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-sky-50 to-blue-50">
+      <div className="container mx-auto px-6 py-8 max-w-7xl space-y-6">
       <div className="rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-sm">
         <div className="px-6 py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -733,6 +741,7 @@ const DoctorDashboard = () => {
             )}
           </CardContent>
         </Card>
+      </div>
       </div>
 
     </div>

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Mail, Phone, MapPin, Send, Clock, CheckCircle, MessageSquare, ArrowRight } from "lucide-react";
+import { Mail, Phone, Globe, Send, Clock, CheckCircle, MessageSquare, ArrowRight, Headphones } from "lucide-react";
 import api from "@/services/api";
 import { useNavigate } from "react-router-dom";
 
@@ -163,14 +163,14 @@ export function ContactUs() {
           {/* Left sidebar — info cards */}
           <div className="space-y-4">
             {[
-              { icon: Mail,  label: "Email Us",       value: "support@mediconnect.com",  color: "text-sky-600",   bg: "bg-sky-50" },
-              { icon: Phone, label: "Call Us",        value: "+91 (800) MEDIC HELP",     color: "text-cyan-600",  bg: "bg-cyan-50" },
-              { icon: MapPin,label: "Our Location",   value: "India",                    color: "text-sky-600", bg: "bg-sky-50" },
-              { icon: Clock, label: "Response Time",  value: "24–48 hours",              color: "text-cyan-600",  bg: "bg-cyan-50" },
-            ].map(({ icon: Icon, label, value, color, bg }) => (
-              <div key={label} className="bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
-                <div className={`h-11 w-11 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
-                  <Icon className={`h-5 w-5 ${color}`} />
+              { icon: Mail,      label: "Email Us",       value: "support@mediconnect.com",  color: "text-sky-600",   bg: "bg-gradient-to-br from-sky-100 to-sky-50", gradient: "from-sky-500 to-sky-600" },
+              { icon: Headphones,label: "Call Us",        value: "+91 (800) MEDIC HELP",     color: "text-cyan-600",  bg: "bg-gradient-to-br from-cyan-100 to-cyan-50", gradient: "from-cyan-500 to-cyan-600" },
+              { icon: Globe,     label: "Our Location",   value: "India",                    color: "text-emerald-600", bg: "bg-gradient-to-br from-emerald-100 to-emerald-50", gradient: "from-emerald-500 to-emerald-600" },
+              { icon: Clock,     label: "Response Time",  value: "24–48 hours",              color: "text-orange-600",  bg: "bg-gradient-to-br from-orange-100 to-orange-50", gradient: "from-orange-500 to-orange-600" },
+            ].map(({ icon: Icon, label, value, color, bg, gradient }) => (
+              <div key={label} className="group bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 shadow-sm hover:shadow-lg hover:border-sky-300 transition-all duration-300">
+                <div className={`h-14 w-14 rounded-xl ${bg} flex items-center justify-center flex-shrink-0 group-hover:shadow-lg group-hover:scale-110 transition-all duration-300`}>
+                  <Icon className={`h-6 w-6 ${color}`} />
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">{label}</p>
@@ -186,6 +186,12 @@ export function ContactUs() {
               <p className="text-sky-100 text-sm leading-relaxed">
                 Issues with login, appointments, or prescriptions are typically resolved within 2 hours.
               </p>
+              <button
+                onClick={() => navigate("/faqs")}
+                className="mt-4 bg-white text-sky-600 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-sky-50 transition-colors"
+              >
+                View FAQs →
+              </button>
             </div>
           </div>
 

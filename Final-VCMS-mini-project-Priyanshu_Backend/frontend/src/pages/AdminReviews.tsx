@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,6 +53,8 @@ const DEFAULT_STATS: ReviewStats = {
 
 const AdminReviews = () => {
   const { toast } = useToast();
+  const { isAuthenticated, user: authUser } = useAuth();
+  const navigate = useNavigate();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [stats, setStats] = useState<ReviewStats>(DEFAULT_STATS);
   const [loading, setLoading] = useState(true);
@@ -68,6 +72,13 @@ const AdminReviews = () => {
     message: "",
     loading: false,
   });
+
+  // Redirect if not authenticated or not an admin
+  useEffect(() => {
+    if (!isAuthenticated || !authUser || authUser.role !== "admin") {
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, authUser, navigate]);
   const [expandedDoctors, setExpandedDoctors] = useState<Set<string>>(new Set());
   const [expandedPatients, setExpandedPatients] = useState<Set<string>>(new Set());
 

@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, HelpCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -10,114 +8,116 @@ const FAQs = () => {
 
   const faqs = [
     {
-      question: "How do I book an appointment with a doctor?",
+      question: "How do I create an account on MediConnect?",
       answer:
-        "You can book an appointment by visiting the Doctors page, selecting a doctor based on specialization and availability, choosing your preferred time slot, and confirming the booking. The doctor will receive your appointment request and confirm it.",
+        "Visit the Sign Up page and enter your email, phone number, and create a password. You'll receive a verification code via email to confirm your identity. Once verified, you can access your patient dashboard and start booking appointments with healthcare providers.",
     },
     {
-      question: "Is my medical information safe and secure?",
+      question: "What should I do if I forget my password?",
       answer:
-        "Yes, we take security very seriously. All medical data is encrypted using industry-standard security protocols. Your information is protected by HIPAA-compliant systems and is never shared without your consent.",
+        "Click on 'Forgot Password' on the login page. Enter your registered email address, and we'll send you a password reset link. Follow the instructions in the email to create a new password. If you don't receive the email, check your spam folder or contact our support team.",
     },
     {
-      question: "Can I reschedule or cancel my appointment?",
+      question: "How do I find and book an appointment with a doctor?",
       answer:
-        "Yes, you can reschedule or cancel appointments from your dashboard. We recommend canceling at least 24 hours before your appointment to avoid any cancellation fees.",
+        "Go to the Doctors page, search by specialization or doctor name, and check their available time slots. Select a suitable appointment time and confirm your booking. You'll receive a confirmation notification, and the doctor will be notified of your appointment request.",
     },
     {
-      question: "How do video consultations work?",
+      question: "Can I reschedule or cancel my booked appointment?",
       answer:
-        "Video consultations are conducted through our secure video platform. Once your appointment time arrives, you'll receive a link to join the consultation. Ensure you have a stable internet connection and a camera/microphone.",
+        "Yes, you can manage your appointments from your dashboard. Click on the appointment and select 'Reschedule' or 'Cancel'. We recommend canceling at least 24 hours in advance. Changes will be instantly updated in the doctor's calendar and you'll receive a notification.",
     },
     {
-      question: "What if I miss my appointment?",
+      question: "How do I access my medical prescriptions?",
       answer:
-        "If you miss an appointment, it will be marked as no-show. We recommend setting reminders for your appointment times. Repeated no-shows may affect your account status.",
+        "After a consultation with your doctor, prescriptions will be automatically uploaded to your 'Medical Prescriptions' section. You can view, download in PDF format, and share them directly with pharmacies. All prescriptions are securely stored for future reference.",
     },
     {
-      question: "How do I get my medical prescriptions?",
+      question: "Is my medical data secure and private?",
       answer:
-        "After a consultation, your doctor will provide prescriptions through the platform. You can view, download, and print your prescriptions from your Medical Prescriptions section. You can also send them directly to your pharmacy.",
+        "Absolutely. All patient data is encrypted using industry-standard SSL/TLS protocols. Your medical records are only accessible to you and authorized healthcare providers. We strictly comply with healthcare data protection regulations and never share your information without consent.",
     },
     {
-      question: "What specializations of doctors are available?",
+      question: "How does the medical OCR feature work?",
       answer:
-        "We have doctors from various specializations including Cardiology, General Medicine, Dermatology, Orthopedics, Pediatrics, Neurology, Psychiatry, and many more. You can filter doctors by specialization on our Doctors page.",
+        "Our Medical OCR (Optical Character Recognition) feature allows you to upload images of medical documents, test reports, or prescriptions. The system automatically extracts text and key medical information, organizing it into your medical records for easy access and reference.",
     },
     {
-      question: "How are doctors verified on MediConnect?",
+      question: "How do I manage my appointments and health notifications?",
       answer:
-        "All doctors on our platform are verified medical professionals with valid licenses and credentials. We conduct thorough background checks and verification before onboarding any healthcare provider.",
+        "Access the Notifications section from your dashboard to view appointment reminders, prescription updates, and system alerts. You can manage notification preferences in your account settings. We'll alert you about upcoming appointments, test results, and important health updates.",
     },
     {
-      question: "What should I do if I have a technical issue during consultation?",
+      question: "What should I do if I encounter a technical issue?",
       answer:
-        "If you experience technical issues, you can contact our support team through the Contact Us page. If internet connectivity is the issue, please check your connection and try reconnecting. We recommend testing your connection before the consultation.",
+        "If you experience any technical problems, try refreshing the page or clearing your browser cache. For persistent issues, visit our Contact Us page to report the problem with details about your device and what you were doing. Our technical support team typically responds within 2-4 hours.",
     },
     {
-      question: "How can I provide feedback or report an issue?",
+      question: "How can I contact MediConnect support?",
       answer:
-        "We'd love to hear from you! You can use the Contact Us page to submit feedback, report issues, or request features. Our support team will review your inquiry and respond promptly.",
+        "You can reach our support team through the Contact Us page by selecting your issue type, providing details, and submitting the form. We also provide email support at support@mediconnect.com and respond to all inquiries within 24-48 hours. For urgent matters, call our hotline.",
     },
   ];
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="container mx-auto px-6 py-8 max-w-7xl">
-      {/* Header */}
-      <div className="container mx-auto px-4 py-12 text-center border-b border-slate-200">
-        <div className="flex justify-center mb-4">
-          <HelpCircle className="h-12 w-12 text-sky-500" />
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-blue-50 to-cyan-50">
+      <div className="container mx-auto px-6 py-12 max-w-4xl">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <div className="flex justify-center mb-4">
+            <div className="bg-sky-100 rounded-full p-3">
+              <HelpCircle className="h-8 w-8 text-sky-600" />
+            </div>
+          </div>
+          <h1 className="text-4xl font-bold text-slate-900 mb-3">Frequently Asked Questions</h1>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+            Get answers to common questions about MediConnect services
+          </p>
         </div>
-        <h1 className="text-4xl font-bold tracking-tight mb-4 text-slate-900">Frequently Asked Questions</h1>
-        <p className="text-lg text-slate-700 max-w-2xl mx-auto">
-          Find answers to common questions about MediConnect services
-        </p>
-      </div>
 
-      {/* FAQs */}
-      <div className="container mx-auto px-4 py-12 max-w-3xl">
-        <div className="space-y-4">
+        {/* FAQs */}
+        <div className="space-y-3 mb-12">
           {faqs.map((faq, index) => (
-            <Card
+            <div
               key={index}
-              className="border-slate-200 border shadow-sm hover:shadow-md transition-shadow cursor-pointer rounded-xl"
+              className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden cursor-pointer"
               onClick={() => setOpenIndex(openIndex === index ? null : index)}
             >
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-left text-base flex-1 text-slate-900">{faq.question}</CardTitle>
-                  <button className="ml-4 flex-shrink-0" aria-label={openIndex === index ? "Collapse answer" : "Expand answer"} title={openIndex === index ? "Collapse" : "Expand"}>
-                    {openIndex === index ? (
-                      <ChevronUp className="h-5 w-5 text-sky-500" />
-                    ) : (
-                      <ChevronDown className="h-5 w-5 text-slate-600" />
-                    )}
-                  </button>
-                </div>
-              </CardHeader>
+              <div className="flex items-center justify-between p-5 gap-4">
+                <h3 className="font-semibold text-slate-900 text-base flex-1 text-left">{faq.question}</h3>
+                <button
+                  className="flex-shrink-0 transition-transform duration-200"
+                  aria-label={openIndex === index ? "Collapse answer" : "Expand answer"}
+                >
+                  {openIndex === index ? (
+                    <ChevronUp className="h-5 w-5 text-sky-500" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-slate-400" />
+                  )}
+                </button>
+              </div>
               {openIndex === index && (
-                <CardContent className="pt-0">
-                  <p className="text-slate-700">{faq.answer}</p>
-                </CardContent>
+                <div className="px-5 pb-5 pt-0 border-t border-slate-100 bg-slate-50">
+                  <p className="text-slate-700 leading-relaxed">{faq.answer}</p>
+                </div>
               )}
-            </Card>
+            </div>
           ))}
         </div>
 
-        {/* Still Have Questions */}
-        <Card className="border-0 shadow-lg mt-12 bg-primary/5">
-          <CardContent className="pt-8 text-center">
-            <h3 className="text-2xl font-bold mb-4">Still have questions?</h3>
-            <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
-              Can't find the answer you're looking for? Our support team is here to help. Get in touch with us!
-            </p>
-            <Button onClick={() => navigate("/contact-us")} size="lg" className="transition-all duration-200 hover:scale-105">
-              Contact support
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+        {/* CTA */}
+        <div className="bg-gradient-to-r from-sky-500 to-cyan-500 rounded-2xl p-8 text-center text-white shadow-lg">
+          <h3 className="text-2xl font-bold mb-2">Still have questions?</h3>
+          <p className="text-sky-100 mb-6 max-w-xl mx-auto">
+            Can't find the answer you're looking for? Our support team is available 24/7 to help.
+          </p>
+          <button
+            onClick={() => navigate("/contact-us")}
+            className="bg-white text-sky-600 px-6 py-3 rounded-lg font-semibold hover:bg-sky-50 transition-colors"
+          >
+            Contact Support
+          </button>
+        </div>
       </div>
     </div>
   );

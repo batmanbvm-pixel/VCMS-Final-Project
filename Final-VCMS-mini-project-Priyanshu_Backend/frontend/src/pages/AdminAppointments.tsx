@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useClinic } from "@/contexts/ClinicContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,10 +20,18 @@ import { PatientMedicalHistoryButton } from "@/components/PatientMedicalHistoryB
 
 const AdminAppointments = () => {
   const { cancelAppointment } = useClinic();
+  const { isAuthenticated, user: authUser } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const initialFilter = searchParams.get("filter") || "all";
+
+  // Redirect if not authenticated or not an admin
+  useEffect(() => {
+    if (!isAuthenticated || !authUser || authUser.role !== "admin") {
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, authUser, navigate]);
 
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

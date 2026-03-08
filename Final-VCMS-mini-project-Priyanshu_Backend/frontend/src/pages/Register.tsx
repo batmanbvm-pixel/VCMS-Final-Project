@@ -1,4 +1,4 @@
-  import { useState } from "react";
+  import { useState, useEffect } from "react";
   import { Link, useNavigate } from "react-router-dom";
   import { useAuth, UserRole } from "@/contexts/AuthContext";
   import { Button } from "@/components/ui/button";
@@ -48,9 +48,16 @@
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [serverError, setServerError] = useState("");
-    const { register } = useAuth();
+    const { register, isAuthenticated, user } = useAuth();
     const navigate = useNavigate();
     const { toast } = useToast();
+
+    // Redirect if already logged in
+    useEffect(() => {
+      if (isAuthenticated && user) {
+        navigate(`/${user.role}`, { replace: true });
+      }
+    }, [isAuthenticated, user, navigate]);
 
     // Validation functions
     const validateEmail = (email: string) => {

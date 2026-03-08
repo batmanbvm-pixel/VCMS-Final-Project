@@ -7,7 +7,7 @@ const PatientAIAnalyzer = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-primary/5">
-      <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
+      <div className="container mx-auto px-6 py-8 space-y-6 max-w-7xl pb-12">
       <div className="rounded-xl bg-sky-500 p-6 shadow-md border border-sky-300 text-white">
         <div className="pointer-events-none absolute -top-14 -right-14 h-52 w-52 rounded-full bg-white/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-16 -left-16 h-44 w-44 rounded-full bg-white/10 blur-3xl" />

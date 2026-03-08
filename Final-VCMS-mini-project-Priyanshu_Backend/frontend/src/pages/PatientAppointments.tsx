@@ -124,7 +124,7 @@ const PatientAppointments = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
+      <div className="container mx-auto px-6 py-8 space-y-6 max-w-7xl pb-12">
 
       {/* ── Hero Header ────────────────────────────────────── */}
       <div className="rounded-xl overflow-hidden bg-sky-500 border border-sky-300 shadow-md text-white">

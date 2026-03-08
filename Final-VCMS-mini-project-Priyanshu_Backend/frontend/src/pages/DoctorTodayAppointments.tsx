@@ -4,6 +4,7 @@ import { useClinic } from "@/contexts/ClinicContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Clock, Video, CheckCircle, XCircle, AlertTriangle, CalendarDays, RefreshCw } from "lucide-react";
@@ -94,112 +95,149 @@ const DoctorTodayAppointments = () => {
     }
   };
 
-  const renderAppointmentCard = (apt: any) => {
+  const renderActionButtons = (apt: any) => {
     const appointmentId = apt._id || apt.id;
     const statusLower = normalizeStatus(apt.status);
     const rx = getPrescriptionByAppointment(appointmentId);
 
-    return (
-      <Card key={appointmentId} className="border-slate-200 shadow-sm bg-white rounded-xl">
-        <CardContent className="pt-6 space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-white text-sm font-bold">
-                {String(apt.patientName || "?")
-                  .split(" ")
-                  .map((n: string) => n[0])
-                  .join("")}
-              </div>
-              <div>
-                <p className="font-medium text-slate-900">{apt.patientName}</p>
-                <p className="text-xs text-slate-700">Age: {apt.patientAge || "—"} • {apt.patientMedicalHistory || "No history"}</p>
-                <div className="flex items-center gap-2 text-xs text-slate-600 mt-1">
-                  <CalendarDays className="h-3 w-3" /> {apt.date}
-                  <Clock className="h-3 w-3" /> {apt.time}
-                  <span>• {apt.specialization}</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2 items-center">
-              {apt.patientId && (
-                <PatientMedicalHistoryButton
-                  patientId={apt.patientId}
-                  patientName={apt.patientName}
-                  variant="outline"
-                  size="sm"
-                    className="bg-sky-100 border-sky-200 text-sky-700 hover:bg-sky-200"
-                />
-              )}
-              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColor(apt.status)}`}>{apt.status}</span>
-            </div>
+    if (statusLower === "booked") {
+      return (
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button size="sm" onClick={() => acceptAppointment(appointmentId)} className="h-8 gap-1 bg-sky-500 hover:bg-sky-600 text-white">
+            <CheckCircle className="h-3 w-3" /> Accept
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 bg-red-100 text-red-700 border-red-200 hover:bg-red-200"
+            onClick={() => setRejectDialog({ open: true, appointmentId, reason: "", loading: false })}
+          >
+            <XCircle className="h-3 w-3 mr-1" /> Reject
+          </Button>
+        </div>
+      );
+    }
+
+    if (statusLower === "accepted") {
+      return (
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button
+            size="sm"
+            className="h-8 gap-1 bg-sky-500 hover:bg-sky-600 text-white"
+            onClick={() => {
+              updateAppointmentStatus(appointmentId, "In Progress");
+              navigate(`/video/${appointmentId}`);
+            }}
+          >
+            <Video className="h-3 w-3" /> Join Call
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 bg-emerald-100 border-emerald-200 text-emerald-700 hover:bg-emerald-200" onClick={() => updateAppointmentStatus(appointmentId, "Completed")}>
+            Mark Completed
+          </Button>
+        </div>
+      );
+    }
+
+    if (statusLower === "in progress" || statusLower === "in-progress") {
+      return (
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button size="sm" className="h-8 gap-1 bg-sky-500 hover:bg-sky-600 text-white" onClick={() => navigate(`/video/${appointmentId}`)}>
+            <Video className="h-3 w-3" /> Join Call
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 bg-emerald-100 border-emerald-200 text-emerald-700 hover:bg-emerald-200" onClick={() => updateAppointmentStatus(appointmentId, "Completed")}>
+            Complete
+          </Button>
+        </div>
+      );
+    }
+
+    if (statusLower === "completed") {
+      return (
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button size="sm" variant="outline" className="h-8 gap-1 bg-sky-100 border-sky-200 text-sky-700 hover:bg-sky-200" onClick={() => navigate(`/create-prescription/${appointmentId}`)}>
+            <CheckCircle className="h-3 w-3" /> {rx ? "Edit Prescription" : "Write Prescription"}
+          </Button>
+        </div>
+      );
+    }
+
+    return <span className="text-xs text-slate-500">—</span>;
+  };
+
+  const renderAppointmentsTable = (title: string, list: any[]) => (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      <Card className="border-slate-200 shadow-sm bg-white rounded-xl overflow-hidden">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50 hover:bg-slate-50">
+                  <TableHead className="min-w-[220px]">Patient</TableHead>
+                  <TableHead className="min-w-[160px]">Schedule</TableHead>
+                  <TableHead className="min-w-[140px]">Specialization</TableHead>
+                  <TableHead className="min-w-[110px]">Status</TableHead>
+                  <TableHead className="min-w-[140px]">Medical History</TableHead>
+                  <TableHead className="min-w-[140px]">View Prescription</TableHead>
+                  <TableHead className="text-right min-w-[220px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.map((apt: any) => {
+                  const appointmentId = apt._id || apt.id;
+                  const rx = getPrescriptionByAppointment(appointmentId);
+                  return (
+                    <TableRow key={appointmentId} className="hover:bg-slate-50/60">
+                      <TableCell>
+                        <div className="font-medium text-slate-900">{apt.patientName}</div>
+                        <div className="text-xs text-slate-600 mt-0.5">Age: {apt.patientAge || "—"} • {apt.patientMedicalHistory || "No history"}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm text-slate-900">{apt.date}</div>
+                        <div className="text-xs text-slate-600">{apt.time}</div>
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-700">{apt.specialization || "—"}</TableCell>
+                      <TableCell>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusColor(apt.status)}`}>{apt.status}</span>
+                      </TableCell>
+                      <TableCell>
+                        {apt.patientId ? (
+                          <PatientMedicalHistoryButton
+                            patientId={apt.patientId}
+                            patientName={apt.patientName}
+                            variant="outline"
+                            size="sm"
+                            className="h-8 bg-sky-100 border-sky-200 text-sky-700 hover:bg-sky-200"
+                          />
+                        ) : (
+                          <span className="text-xs text-slate-500">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {rx ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
+                            onClick={() => navigate(rx?._id ? `/prescriptions/${rx._id}` : `/prescriptions/appointment/${appointmentId}`)}
+                          >
+                            View Rx
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-slate-500">No Rx</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">{renderActionButtons(apt)}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
-
-          {statusLower === "booked" && (
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => acceptAppointment(appointmentId)} className="gap-1 bg-sky-500 hover:bg-sky-600 text-white transition-all duration-200 hover:scale-105">
-                <CheckCircle className="h-3 w-3" /> Accept
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="bg-red-100 text-red-700 border-red-200 hover:bg-red-200 transition-all duration-200 hover:scale-105"
-                onClick={() => setRejectDialog({ open: true, appointmentId, reason: "", loading: false })}
-              >
-                <XCircle className="h-3 w-3 mr-1" /> Reject
-              </Button>
-            </div>
-          )}
-
-          {statusLower === "accepted" && (
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                size="sm"
-                onClick={() => {
-                  updateAppointmentStatus(appointmentId, "In Progress");
-                  navigate(`/video/${appointmentId}`);
-                }}
-                className="gap-1 bg-sky-500 hover:bg-sky-600 text-white transition-all duration-200 hover:scale-105"
-              >
-                <Video className="h-3 w-3" /> Join Video Call
-              </Button>
-              <Button size="sm" variant="outline" className="bg-emerald-100 border-emerald-200 text-emerald-700 hover:bg-emerald-200 transition-all duration-200 hover:scale-105" onClick={() => updateAppointmentStatus(appointmentId, "Completed")}>
-                Mark Completed
-              </Button>
-            </div>
-          )}
-
-          {(statusLower === "in progress" || statusLower === "in-progress") && (
-            <div className="flex gap-2 flex-wrap">
-              <Button size="sm" onClick={() => navigate(`/video/${appointmentId}`)} className="gap-1 bg-sky-500 hover:bg-sky-600 text-white transition-all duration-200 hover:scale-105">
-                <Video className="h-3 w-3" /> Join Video Call
-              </Button>
-              <Button size="sm" variant="outline" className="gap-1 bg-emerald-100 border-emerald-200 text-emerald-700 hover:bg-emerald-200 transition-all duration-200 hover:scale-105" onClick={() => updateAppointmentStatus(appointmentId, "Completed")}>
-                <CheckCircle className="h-3 w-3" /> Complete
-              </Button>
-            </div>
-          )}
-
-          {statusLower === "completed" && (
-            <div className="flex gap-2 flex-wrap">
-              <Button size="sm" variant="outline" className="gap-1 bg-sky-100 border-sky-200 text-sky-700 hover:bg-sky-200 transition-all duration-200 hover:scale-105" onClick={() => navigate(`/create-prescription/${appointmentId}`)}>
-                <CheckCircle className="h-3 w-3" /> {rx ? "Edit Prescription" : "Write Prescription"}
-              </Button>
-              {rx && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-xs bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200 transition-all duration-200 hover:scale-105"
-                  onClick={() => navigate(rx?._id ? `/prescriptions/${rx._id}` : `/prescriptions/appointment/${appointmentId}`)}
-                >
-                  View Rx
-                </Button>
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
-    );
-  };
+    </div>
+  );
 
   return (
     <div className="container mx-auto px-6 py-8 space-y-6 max-w-7xl pb-12">
@@ -225,26 +263,11 @@ const DoctorTodayAppointments = () => {
         </Card>
       )}
 
-      {todayAppointments.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-900">Today's Appointments</h2>
-          {todayAppointments.map(renderAppointmentCard)}
-        </div>
-      )}
+      {todayAppointments.length > 0 && renderAppointmentsTable("Today's Appointments", todayAppointments)}
 
-      {upcomingAppointments.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-900">Upcoming Appointments</h2>
-          {upcomingAppointments.map(renderAppointmentCard)}
-        </div>
-      )}
+      {upcomingAppointments.length > 0 && renderAppointmentsTable("Upcoming Appointments", upcomingAppointments)}
 
-      {completedAppointments.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-900">Completed Appointments</h2>
-          {completedAppointments.map(renderAppointmentCard)}
-        </div>
-      )}
+      {completedAppointments.length > 0 && renderAppointmentsTable("Completed Appointments", completedAppointments)}
 
       <Dialog open={rejectDialog.open} onOpenChange={(open) => setRejectDialog((prev) => ({ ...prev, open }))}>
         <DialogContent>

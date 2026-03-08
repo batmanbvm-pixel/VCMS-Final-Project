@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,11 +75,20 @@ interface Contact {
 
 export default function AdminContacts() {
   const { toast } = useToast();
+  const { isAuthenticated, user: authUser } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<ContactStats | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+
+  // Redirect if not authenticated or not an admin
+  useEffect(() => {
+    if (!isAuthenticated || !authUser || authUser.role !== "admin") {
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, authUser, navigate]);
   const [showDetails, setShowDetails] = useState(false);
   const [statusUpdateLoading, setStatusUpdateLoading] = useState(false);
   const [tableView, setTableView] = useState<"unresolved" | "resolved">("unresolved");

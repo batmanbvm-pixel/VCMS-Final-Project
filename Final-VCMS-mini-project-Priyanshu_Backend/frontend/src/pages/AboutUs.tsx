@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Heart, Users, Zap, Shield, Activity, CheckCircle, Star, Code2 } from "lucide-react";
+import { ArrowRight, Heart, Users, Sparkles, Lock, Activity, CheckCircle, Star, Code2 } from "lucide-react";
 
 const AboutUs = () => {
   const navigate = useNavigate();
@@ -14,14 +14,14 @@ const AboutUs = () => {
       bg: "bg-rose-50",
     },
     {
-      icon: Shield,
+      icon: Lock,
       title: "Privacy & Security",
       desc: "Your health data is encrypted, private, and never sold to third parties.",
       color: "text-sky-600",
       bg: "bg-sky-50",
     },
     {
-      icon: Zap,
+      icon: Sparkles,
       title: "Speed & Reliability",
       desc: "Real-time video, instant prescriptions, and lightning-fast appointment booking.",
       color: "text-cyan-600",
@@ -63,18 +63,18 @@ const AboutUs = () => {
       {/* Mission & Vision */}
       <section className="py-20 px-4 bg-white/60 backdrop-blur-sm">
         <div className="container mx-auto max-w-5xl grid md:grid-cols-2 gap-10">
-          <div className="space-y-4">
-            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-rose-100 to-pink-100 flex items-center justify-center">
-              <Heart className="h-6 w-6 text-rose-500" />
+          <div className="group space-y-4 p-6 rounded-2xl hover:bg-white/80 transition-all duration-300">
+            <div className="h-16 w-16 rounded-xl bg-gradient-to-br from-rose-100 to-pink-100 flex items-center justify-center group-hover:scale-110 group-hover:shadow-lg transition-all duration-300">
+              <Heart className="h-7 w-7 text-rose-500" />
             </div>
             <h2 className="text-2xl font-bold text-slate-900">Our Mission</h2>
             <p className="text-slate-700 leading-relaxed">
               To make quality healthcare accessible to everyone — anytime, anywhere. We bridge the gap between patients and healthcare providers using the best of modern technology, so no one has to delay getting the care they need.
             </p>
           </div>
-          <div className="space-y-4">
-            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
-              <Zap className="h-6 w-6 text-amber-500" />
+          <div className="group space-y-4 p-6 rounded-2xl hover:bg-white/80 transition-all duration-300">
+            <div className="h-16 w-16 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center group-hover:scale-110 group-hover:shadow-lg transition-all duration-300">
+              <Sparkles className="h-7 w-7 text-amber-500" />
             </div>
             <h2 className="text-2xl font-bold text-slate-900">Our Vision</h2>
             <p className="text-slate-700 leading-relaxed">
@@ -93,9 +93,9 @@ const AboutUs = () => {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {values.map(({ icon: Icon, title, desc, color, bg }) => (
-              <div key={title} className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all">
-                <div className={`h-12 w-12 rounded-xl ${bg} flex items-center justify-center mb-4`}>
-                  <Icon className={`h-6 w-6 ${color}`} />
+              <div key={title} className="group bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-lg hover:border-sky-300 transition-all duration-300 hover:-translate-y-1">
+                <div className={`h-14 w-14 rounded-xl ${bg} flex items-center justify-center mb-4 group-hover:scale-110 transition-all duration-300`}>
+                  <Icon className={`h-7 w-7 ${color}`} />
                 </div>
                 <h3 className="font-bold text-slate-900 text-lg mb-2">{title}</h3>
                 <p className="text-slate-700 text-sm leading-relaxed">{desc}</p>

@@ -5,6 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, XCircle, FileText, Calendar, Mail, Phone, Award, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import api from "@/services/api";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { EmptyState } from "@/components/EmptyState";
@@ -33,6 +35,8 @@ interface PatientApproval {
 
 const AdminApprovals = () => {
   const { toast } = useToast();
+  const { isAuthenticated, user: authUser } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [approvalTab, setApprovalTab] = useState<"doctors" | "patients">("doctors");
   const [pendingDoctors, setPendingDoctors] = useState<DoctorApproval[]>([]);
@@ -42,6 +46,13 @@ const AdminApprovals = () => {
   const [rejectingDoctor, setRejectingDoctor] = useState<DoctorApproval | null>(null);
   const [rejectingPatient, setRejectingPatient] = useState<PatientApproval | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+
+  // Redirect if not authenticated or not an admin
+  useEffect(() => {
+    if (!isAuthenticated || !authUser || authUser.role !== "admin") {
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, authUser, navigate]);
 
   useEffect(() => {
     fetchPendingUsers();

@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Search, Users, RefreshCw, Stethoscope, Shield, User as UserIcon, AlertTriangle, Filter, Eye, Bell } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import api from "@/services/api";
 import { EmptyState } from "@/components/EmptyState";
 import StatusBadge from "@/components/StatusBadge";
@@ -32,10 +32,18 @@ const formatLocation = (loc: any): string => {
 };
 
 const AdminUsers = () => {
-  const { users: contextUsers, deleteUser, warnUser } = useAuth();
+  const { users: contextUsers, deleteUser, warnUser, isAuthenticated, user: authUser } = useAuth();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") || "all";
+
+  // Redirect if not authenticated or not an admin
+  useEffect(() => {
+    if (!isAuthenticated || !authUser || authUser.role !== "admin") {
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, authUser, navigate]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<string>(initialTab);

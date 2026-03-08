@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Activity, LogOut, User, ArrowLeft, LayoutDashboard, Bell, Phone, Info, UserCheck } from "lucide-react";
+import { Activity, LogOut, User, ArrowLeft, LayoutDashboard, Bell, CircleHelp, MessageCircle, UserCheck } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import api from "@/services/api";
@@ -154,19 +154,23 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="hidden sm:flex items-center gap-2 h-10 px-4 text-slate-700 hover:text-sky-600 hover:bg-sky-50 text-sm font-semibold rounded-xl transition-all"
+                  className="hidden sm:flex items-center gap-2.5 h-11 px-4 text-slate-700 hover:text-sky-700 hover:bg-sky-50/80 border border-slate-200/80 hover:border-sky-200 text-sm font-semibold rounded-2xl transition-all duration-200"
                   onClick={() => navigate("/about-us")}
                 >
-                  <Info className="h-4 w-4" />
+                  <span className="h-7 w-7 rounded-lg bg-gradient-to-br from-sky-100 to-cyan-100 flex items-center justify-center border border-sky-200/70">
+                    <CircleHelp className="h-4 w-4 text-sky-700" />
+                  </span>
                   About
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="hidden sm:flex items-center gap-2 h-10 px-4 text-slate-700 hover:text-sky-600 hover:bg-sky-50 text-sm font-semibold rounded-xl transition-all"
-                  onClick={() => navigate("/contact")}
+                  className="hidden sm:flex items-center gap-2.5 h-11 px-4 text-slate-700 hover:text-sky-700 hover:bg-sky-50/80 border border-slate-200/80 hover:border-sky-200 text-sm font-semibold rounded-2xl transition-all duration-200"
+                  onClick={() => navigate("/contact-us")}
                 >
-                  <Phone className="h-4 w-4" />
+                  <span className="h-7 w-7 rounded-lg bg-gradient-to-br from-cyan-100 to-sky-100 flex items-center justify-center border border-cyan-200/70">
+                    <MessageCircle className="h-4 w-4 text-cyan-700" />
+                  </span>
                   Contact
                 </Button>
               </>
