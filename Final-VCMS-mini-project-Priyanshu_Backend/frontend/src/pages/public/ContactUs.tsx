@@ -27,6 +27,7 @@ export function ContactUs() {
 
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   const [formData, setFormData] = useState({
     problemType: "",
@@ -48,14 +49,23 @@ export function ContactUs() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    // Clear error for this field when user starts typing
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: "" }));
+    }
   };
 
   const handleSelectChange = (name: string, value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
+    // Clear error for this field when user selects
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: "" }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const newErrors: { [key: string]: string } = {};
 
     if (!isAuthenticated) {
       toast({
@@ -70,30 +80,27 @@ export function ContactUs() {
     const subject = formData.subject.trim();
     const description = formData.description.trim();
 
-    if (!formData.problemType || !subject || !description) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      });
-      return;
+    // Validate fields
+    if (!formData.problemType) {
+      newErrors.problemType = "Please select a problem type";
+    }
+    if (!subject) {
+      newErrors.subject = "Subject is required";
+    } else if (subject.length < 5) {
+      newErrors.subject = "Subject must be at least 5 characters";
+    } else if (subject.length > 100) {
+      newErrors.subject = "Subject must not exceed 100 characters";
+    }
+    if (!description) {
+      newErrors.description = "Description is required";
+    } else if (description.length < 10) {
+      newErrors.description = "Description must be at least 10 characters";
+    } else if (description.length > 2000) {
+      newErrors.description = "Description must not exceed 2000 characters";
     }
 
-    if (subject.length < 5 || subject.length > 100) {
-      toast({
-        title: "Invalid Subject",
-        description: "Subject must be between 5 and 100 characters.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (description.length < 10 || description.length > 2000) {
-      toast({
-        title: "Invalid Description",
-        description: "Description must be between 10 and 2000 characters.",
-        variant: "destructive",
-      });
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
 
@@ -229,10 +236,10 @@ export function ContactUs() {
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="grid sm:grid-cols-2 gap-4">
                     {/* Problem Type */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <label className="text-sm font-semibold text-slate-900">Problem Type <span className="text-red-500">*</span></label>
                       <Select value={formData.problemType} onValueChange={(v) => handleSelectChange("problemType", v)}>
-                        <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200">
+                        <SelectTrigger className={`h-11 rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200 ${errors.problemType ? "border-amber-300 bg-amber-50/30" : ""}`}>
                           <SelectValue placeholder="Select problem type..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -241,10 +248,11 @@ export function ContactUs() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {errors.problemType && <p className="text-sm text-amber-700 font-medium">{errors.problemType}</p>}
                     </div>
 
                     {/* Priority */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <label className="text-sm font-semibold text-slate-900">Priority</label>
                       <Select value={formData.priority} onValueChange={(v) => handleSelectChange("priority", v)}>
                         <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200">
@@ -263,7 +271,7 @@ export function ContactUs() {
                   </div>
 
                   {/* Subject */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <label className="text-sm font-semibold text-slate-900">Subject <span className="text-red-500">*</span></label>
                     <Input
                       name="subject"
@@ -271,13 +279,16 @@ export function ContactUs() {
                       value={formData.subject}
                       onChange={handleInputChange}
                       maxLength={100}
-                      className="h-11 rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200"
+                      className={`h-11 rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200 ${errors.subject ? "border-amber-300 bg-amber-50/30" : ""}`}
                     />
-                    <p className="text-xs text-slate-600">{formData.subject.length}/100</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-600">{formData.subject.length}/100</p>
+                      {errors.subject && <p className="text-sm text-amber-700 font-medium">{errors.subject}</p>}
+                    </div>
                   </div>
 
                   {/* Description */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <label className="text-sm font-semibold text-slate-900">Description <span className="text-red-500">*</span></label>
                     <Textarea
                       name="description"
@@ -286,9 +297,12 @@ export function ContactUs() {
                       onChange={handleInputChange}
                       maxLength={2000}
                       rows={6}
-                      className="rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200 resize-none"
+                      className={`rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200 resize-none ${errors.description ? "border-amber-300 bg-amber-50/30" : ""}`}
                     />
-                    <p className="text-xs text-slate-600">{formData.description.length}/2000</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-600">{formData.description.length}/2000</p>
+                      {errors.description && <p className="text-sm text-amber-700 font-medium">{errors.description}</p>}
+                    </div>
                   </div>
 
                   <button
