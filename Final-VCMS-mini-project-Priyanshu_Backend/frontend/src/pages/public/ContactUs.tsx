@@ -135,222 +135,178 @@ export function ContactUs() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl"></div>
-      </div>
-
-      {/* Header */}
-      <div className="relative pt-20 pb-12 px-4 text-white">
-        <div className="max-w-6xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 bg-blue-500/20 border border-blue-400/30 rounded-full px-4 py-2 mb-6 backdrop-blur-sm">
-            <Mail className="h-4 w-4 text-blue-300" />
-            <span className="text-sm font-medium text-blue-200">Support Center</span>
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-cyan-50 to-blue-50">
+      {/* Hero */}
+      <div className="bg-sky-500 py-16 px-4 text-white border-b border-sky-300">
+        <div className="max-w-4xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 rounded-full px-4 py-1.5 mb-6 text-white">
+            <Mail className="h-4 w-4" />
+            <span className="text-sm font-medium">Support Center</span>
           </div>
-          <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-400">
-            Get in Touch
-          </h1>
-          <p className="text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
-            Have questions or need support? Our team is here to help. Reach out and we'll respond within 24-48 hours.
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">How can we help?</h1>
+          <p className="text-white/90 text-lg max-w-xl mx-auto">
+            Send us a message and our support team will get back to you within 24–48 hours.
           </p>
         </div>
       </div>
 
-      {/* Contact Info Cards */}
-      <div className="relative max-w-6xl mx-auto px-4 py-12">
-        <div className="grid md:grid-cols-4 gap-6 mb-16">
-          {[
-            { icon: Mail, label: "Email", value: "support@mediconnect.com", color: "from-blue-500 to-blue-600" },
-            { icon: Phone, label: "Phone", value: "+91 (800) MEDIC HELP", color: "from-cyan-500 to-cyan-600" },
-            { icon: MapPin, label: "Location", value: "India", color: "from-violet-500 to-violet-600" },
-            { icon: Clock, label: "Response", value: "24–48 hours", color: "from-emerald-500 to-emerald-600" },
-          ].map(({ icon: Icon, label, value, color }) => (
-            <div
-              key={label}
-              className="group relative bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 hover:border-slate-600/80 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10"
-            >
-              <div className={`absolute inset-0 bg-gradient-to-br ${color} opacity-0 group-hover:opacity-5 rounded-2xl transition-opacity duration-300`}></div>
-              <div className="relative">
-                <div className={`inline-block p-3 rounded-xl bg-gradient-to-br ${color} mb-4`}>
-                  <Icon className="h-6 w-6 text-white" />
-                </div>
-                <h3 className="text-white font-semibold mb-1 text-sm uppercase tracking-wider">{label}</h3>
-                <p className="text-slate-300 text-sm">{value}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Main Form Section */}
+      <div className="max-w-6xl mx-auto px-4 py-12">
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Left - Features */}
-          <div className="space-y-6">
-            <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6">
-              <MessageSquare className="h-8 w-8 text-blue-400 mb-4" />
-              <h3 className="text-white font-bold mb-2">Quick Support</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">
-                Issues with appointments, prescriptions, and accounts typically resolved within 2 hours.
-              </p>
-            </div>
 
-            <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6">
-              <CheckCircle className="h-8 w-8 text-emerald-400 mb-4" />
-              <h3 className="text-white font-bold mb-2">Secure & Confidential</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">
-                All submissions are encrypted and treated with complete confidentiality.
+          {/* Left sidebar — info cards */}
+          <div className="space-y-4">
+            {[
+              { icon: Mail,  label: "Email Us",       value: "support@mediconnect.com",  color: "text-sky-600",   bg: "bg-sky-50" },
+              { icon: Phone, label: "Call Us",        value: "+91 (800) MEDIC HELP",     color: "text-cyan-600",  bg: "bg-cyan-50" },
+              { icon: MapPin,label: "Our Location",   value: "India",                    color: "text-sky-600", bg: "bg-sky-50" },
+              { icon: Clock, label: "Response Time",  value: "24–48 hours",              color: "text-cyan-600",  bg: "bg-cyan-50" },
+            ].map(({ icon: Icon, label, value, color, bg }) => (
+              <div key={label} className="bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
+                <div className={`h-11 w-11 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
+                  <Icon className={`h-5 w-5 ${color}`} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">{label}</p>
+                  <p className="text-slate-900 font-medium text-sm mt-0.5">{value}</p>
+                </div>
+              </div>
+            ))}
+
+            {/* FAQ hint */}
+            <div className="bg-sky-500 rounded-xl p-5 text-white">
+              <MessageSquare className="h-7 w-7 text-sky-100 mb-3" />
+              <h3 className="font-bold mb-1">Common Questions</h3>
+              <p className="text-sky-100 text-sm leading-relaxed">
+                Issues with login, appointments, or prescriptions are typically resolved within 2 hours.
               </p>
             </div>
           </div>
 
-          {/* Right - Form */}
-          <div className="lg:col-span-2">
-            <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8">
-              {submitted ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="h-16 w-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-6 animate-pulse">
-                    <CheckCircle className="h-8 w-8 text-white" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-white mb-2">Message Sent!</h2>
-                  <p className="text-slate-400 max-w-sm">
-                    Thank you for reaching out. Our support team will review your request and respond shortly.
-                  </p>
+          {/* Right – form card */}
+          <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-md p-8">
+            {submitted ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="h-20 w-20 rounded-full bg-cyan-50 flex items-center justify-center mb-6">
+                  <CheckCircle className="h-10 w-10 text-cyan-500" />
                 </div>
-              ) : !isAuthenticated ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-6">
-                    <Mail className="h-8 w-8 text-white" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-white mb-2">Login Required</h2>
-                  <p className="text-slate-400 mb-6">Please log in to submit a support request.</p>
-                  <Button
-                    onClick={() => navigate("/login")}
-                    className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold h-11 px-8 rounded-xl flex items-center gap-2 transition-all hover:scale-105"
-                  >
-                    Go to Login
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
+                <h2 className="text-2xl font-bold text-slate-900 mb-2">Message Sent!</h2>
+                <p className="text-slate-700 max-w-sm">
+                  Thank you for reaching out. Our support team will review your request and respond within 24–48 hours.
+                </p>
+              </div>
+            ) : !isAuthenticated ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="h-20 w-20 rounded-full bg-sky-50 flex items-center justify-center mb-6">
+                  <Mail className="h-10 w-10 text-sky-500" />
                 </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* User Info */}
-                  <div className="flex items-center gap-4 bg-slate-700/30 rounded-xl p-4 border border-slate-600/30">
-                    <div className="h-12 w-12 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold flex-shrink-0">
-                      {(user?.name || "U").charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-white font-semibold text-sm">{user?.name}</p>
-                      <p className="text-slate-400 text-xs">{user?.email}</p>
-                    </div>
-                  </div>
+                <h2 className="text-xl font-bold text-slate-900 mb-2">Login Required</h2>
+                <p className="text-slate-700 mb-6">Please login to your account to submit a support request.</p>
+                <button
+                  onClick={() => navigate("/login")}
+                  className="h-11 px-6 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-semibold transition-all duration-200 hover:scale-105"
+                >
+                  Go to Login
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="mb-8">
+                  <h2 className="text-xl font-bold text-slate-900 mb-1">Submit a Support Request</h2>
+                  <p className="text-slate-700 text-sm">All fields marked * are required.</p>
+                </div>
 
-                  {/* Problem Type & Priority */}
+                {/* User identity banner */}
+                <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
+                  <div className="h-10 w-10 rounded-full bg-sky-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                    {(user?.name || "U").charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 text-sm">{user?.name}</p>
+                    <p className="text-slate-600 text-xs">{user?.email} · <span className="capitalize">{user?.role}</span></p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-white font-semibold text-sm mb-2">
-                        Problem Type <span className="text-red-400">*</span>
-                      </label>
-                      <Select value={formData.problemType} onValueChange={(value) => handleSelectChange("problemType", value)}>
-                        <SelectTrigger className="bg-slate-700/50 border-slate-600/50 text-white rounded-xl h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                    {/* Problem Type */}
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-semibold text-slate-900">Problem Type <span className="text-red-500">*</span></label>
+                      <Select value={formData.problemType} onValueChange={(v) => handleSelectChange("problemType", v)}>
+                        <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200">
                           <SelectValue placeholder="Select problem type..." />
                         </SelectTrigger>
-                        <SelectContent className="bg-slate-800 border-slate-700">
-                          {problemTypes.map((type) => (
-                            <SelectItem key={type.value} value={type.value} className="text-white">
-                              {type.label}
-                            </SelectItem>
+                        <SelectContent>
+                          {problemTypes.map((t) => (
+                            <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    <div>
-                      <label className="block text-white font-semibold text-sm mb-2">Priority</label>
-                      <Select value={formData.priority} onValueChange={(value) => handleSelectChange("priority", value)}>
-                        <SelectTrigger className="bg-slate-700/50 border-slate-600/50 text-white rounded-xl h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                    {/* Priority */}
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-semibold text-slate-900">Priority</label>
+                      <Select value={formData.priority} onValueChange={(v) => handleSelectChange("priority", v)}>
+                        <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="bg-slate-800 border-slate-700">
+                        <SelectContent>
                           {[
-                            { value: "low", label: "🟢 Low" },
+                            { value: "low",    label: "🟢 Low" },
                             { value: "medium", label: "🟡 Medium" },
-                            { value: "high", label: "🟠 High" },
+                            { value: "high",   label: "🟠 High" },
                             { value: "urgent", label: "🔴 Urgent" },
-                          ].map((p) => (
-                            <SelectItem key={p.value} value={p.value} className="text-white">
-                              {p.label}
-                            </SelectItem>
-                          ))}
+                          ].map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
 
                   {/* Subject */}
-                  <div>
-                    <label className="block text-white font-semibold text-sm mb-2">
-                      Subject <span className="text-red-400">*</span>
-                    </label>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-900">Subject <span className="text-red-500">*</span></label>
                     <Input
                       name="subject"
                       placeholder="Brief subject of your issue..."
                       value={formData.subject}
                       onChange={handleInputChange}
                       maxLength={100}
-                      className="bg-slate-700/50 border-slate-600/50 text-white placeholder:text-slate-500 rounded-xl h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                      className="h-11 rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200"
                     />
-                    <p className="text-slate-400 text-xs mt-1">{formData.subject.length}/100 characters</p>
+                    <p className="text-xs text-slate-600">{formData.subject.length}/100</p>
                   </div>
 
                   {/* Description */}
-                  <div>
-                    <label className="block text-white font-semibold text-sm mb-2">
-                      Description <span className="text-red-400">*</span>
-                    </label>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-900">Description <span className="text-red-500">*</span></label>
                     <Textarea
                       name="description"
                       placeholder="Please provide detailed information about your issue..."
                       value={formData.description}
                       onChange={handleInputChange}
                       maxLength={2000}
-                      rows={5}
-                      className="bg-slate-700/50 border-slate-600/50 text-white placeholder:text-slate-500 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 resize-none"
+                      rows={6}
+                      className="rounded-xl border-slate-200 bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200 resize-none"
                     />
-                    <p className="text-slate-400 text-xs mt-1">{formData.description.length}/2000 characters</p>
+                    <p className="text-xs text-slate-600">{formData.description.length}/2000</p>
                   </div>
 
-                  {/* Submit Button */}
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold flex items-center justify-center gap-2 transition-all duration-200 hover:scale-[1.02] disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full h-12 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-semibold flex items-center justify-center gap-2 transition-all duration-200 hover:scale-[1.01] disabled:opacity-70"
                   >
                     {loading ? (
-                      <>
-                        <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Submitting...
-                      </>
+                      <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Submitting...</>
                     ) : (
-                      <>
-                        <Send className="h-4 w-4" />
-                        Submit Request
-                      </>
+                      <><Send className="h-4 w-4" /> Submit Request</>
                     )}
                   </button>
                 </form>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
-      </div>
-
-      {/* Footer note */}
-      <div className="relative mt-16 pb-12 text-center">
-        <p className="text-slate-400 text-sm">
-          <Clock className="h-4 w-4 inline mr-2" />
-          Average response time: 24–48 hours
-        </p>
       </div>
     </div>
   );
