@@ -40,7 +40,6 @@ import GuestDashboard from "./pages/GuestDashboard";
 import NotFound from "./pages/NotFound";
 import AboutUs from "./pages/AboutUs";
 import FAQs from "./pages/FAQs";
-import ContactUs from "./pages/ContactUs";
 
 const queryClient = new QueryClient();
 
@@ -203,7 +202,7 @@ const router = createBrowserRouter([
         <ClinicProvider>
           <Layout>
             <ProtectedRoute allowedRoles={["doctor", "patient", "admin"]}>
-              <ContactUs />
+              <PublicContactUs />
             </ProtectedRoute>
           </Layout>
         </ClinicProvider>
