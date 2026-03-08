@@ -63,6 +63,7 @@ const FAQs = () => {
 
   return (
     <div className="min-h-screen bg-white">
+      <div className="container mx-auto px-6 py-8 max-w-7xl">
       {/* Header */}
       <div className="container mx-auto px-4 py-12 text-center border-b border-slate-200">
         <div className="flex justify-center mb-4">
@@ -116,6 +117,7 @@ const FAQs = () => {
             </Button>
           </CardContent>
         </Card>
+      </div>
       </div>
     </div>
   );

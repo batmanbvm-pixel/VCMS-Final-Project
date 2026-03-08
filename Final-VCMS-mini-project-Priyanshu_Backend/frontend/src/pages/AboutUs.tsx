@@ -40,6 +40,7 @@ const AboutUs = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-cyan-50 to-blue-50">
+      <div className="container mx-auto px-6 max-w-7xl">
       {/* Hero */}
       <section className="bg-sky-500 py-24 px-4 text-white border-b border-sky-300">
         <div className="container mx-auto max-w-3xl text-center space-y-6">
@@ -139,6 +140,7 @@ const AboutUs = () => {
           </div>
         </div>
       </section>
+      </div>
     </div>
   );
 };
