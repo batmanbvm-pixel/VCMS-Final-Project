@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Mail, Phone, MapPin, Send } from "lucide-react";
+import { Mail, Phone, MapPin, Send, Clock, CheckCircle, MessageSquare, ArrowRight } from "lucide-react";
 import api from "@/services/api";
 import { useNavigate } from "react-router-dom";
 
@@ -136,164 +135,222 @@ export function ContactUs() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-cyan-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl"></div>
+      </div>
+
       {/* Header */}
-      <div className="bg-sky-500 py-20 px-4 text-white border-b border-sky-300">
-        <div className="container mx-auto px-4 text-center">
-          <h1 className="text-4xl font-bold tracking-tight mb-4">Contact Us</h1>
-          <p className="text-lg text-white/90 max-w-2xl mx-auto">
-          Have a question or need support? We're here to help!
-        </p>
+      <div className="relative pt-20 pb-12 px-4 text-white">
+        <div className="max-w-6xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 bg-blue-500/20 border border-blue-400/30 rounded-full px-4 py-2 mb-6 backdrop-blur-sm">
+            <Mail className="h-4 w-4 text-blue-300" />
+            <span className="text-sm font-medium text-blue-200">Support Center</span>
+          </div>
+          <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-400">
+            Get in Touch
+          </h1>
+          <p className="text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
+            Have questions or need support? Our team is here to help. Reach out and we'll respond within 24-48 hours.
+          </p>
         </div>
       </div>
 
-      {/* Contact Info & Form */}
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid md:grid-cols-3 gap-8 mb-12">
-          {/* Contact Info Cards */}
-          <Card className="border-0 shadow-md">
-            <CardContent className="pt-6 text-center">
-              <Mail className="h-10 w-10 text-primary mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">Email</h3>
-              <p className="text-muted-foreground text-sm">support@mediconnect.com</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-0 shadow-md">
-            <CardContent className="pt-6 text-center">
-              <Phone className="h-10 w-10 text-primary mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">Phone</h3>
-              <p className="text-muted-foreground text-sm">+91 (800) MEDIC HELP</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-0 shadow-md">
-            <CardContent className="pt-6 text-center">
-              <MapPin className="h-10 w-10 text-primary mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">Address</h3>
-              <p className="text-muted-foreground text-sm">India</p>
-            </CardContent>
-          </Card>
+      {/* Contact Info Cards */}
+      <div className="relative max-w-6xl mx-auto px-4 py-12">
+        <div className="grid md:grid-cols-4 gap-6 mb-16">
+          {[
+            { icon: Mail, label: "Email", value: "support@mediconnect.com", color: "from-blue-500 to-blue-600" },
+            { icon: Phone, label: "Phone", value: "+91 (800) MEDIC HELP", color: "from-cyan-500 to-cyan-600" },
+            { icon: MapPin, label: "Location", value: "India", color: "from-violet-500 to-violet-600" },
+            { icon: Clock, label: "Response", value: "24–48 hours", color: "from-emerald-500 to-emerald-600" },
+          ].map(({ icon: Icon, label, value, color }) => (
+            <div
+              key={label}
+              className="group relative bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 hover:border-slate-600/80 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10"
+            >
+              <div className={`absolute inset-0 bg-gradient-to-br ${color} opacity-0 group-hover:opacity-5 rounded-2xl transition-opacity duration-300`}></div>
+              <div className="relative">
+                <div className={`inline-block p-3 rounded-xl bg-gradient-to-br ${color} mb-4`}>
+                  <Icon className="h-6 w-6 text-white" />
+                </div>
+                <h3 className="text-white font-semibold mb-1 text-sm uppercase tracking-wider">{label}</h3>
+                <p className="text-slate-300 text-sm">{value}</p>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Contact Form */}
-        <Card className="border-0 shadow-lg max-w-2xl mx-auto">
-          <CardHeader>
-            <CardTitle>Send us a message</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {submitted ? (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                <p className="text-green-800 font-semibold mb-2">✓ Thank you for reaching out!</p>
-                <p className="text-green-700 text-sm">
-                  Your message has been received. Our support team will review it shortly and get back to you.
-                </p>
-              </div>
-            ) : !isAuthenticated ? (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-                <p className="text-blue-800 font-semibold mb-4">Login Required</p>
-                <p className="text-blue-700 text-sm mb-4">
-                  Please log in to your account to submit a contact request.
-                </p>
-                <Button onClick={() => navigate("/login")}>Go to Login</Button>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* User Info Display */}
-                <div className="bg-muted/50 p-4 rounded-lg space-y-2 text-sm">
-                  <p>
-                    <span className="font-semibold">Name:</span> {user?.name}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Email:</span> {user?.email}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Role:</span> {user?.role?.toUpperCase()}
-                  </p>
-                </div>
+        {/* Main Form Section */}
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Left - Features */}
+          <div className="space-y-6">
+            <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6">
+              <MessageSquare className="h-8 w-8 text-blue-400 mb-4" />
+              <h3 className="text-white font-bold mb-2">Quick Support</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Issues with appointments, prescriptions, and accounts typically resolved within 2 hours.
+              </p>
+            </div>
 
-                {/* Problem Type */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold">
-                    Problem Type <span className="text-destructive">*</span>
-                  </label>
-                  <Select value={formData.problemType} onValueChange={(value) => handleSelectChange("problemType", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select problem type..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {problemTypes.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+            <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6">
+              <CheckCircle className="h-8 w-8 text-emerald-400 mb-4" />
+              <h3 className="text-white font-bold mb-2">Secure & Confidential</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                All submissions are encrypted and treated with complete confidentiality.
+              </p>
+            </div>
+          </div>
 
-                {/* Priority */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold">Priority</label>
-                  <Select value={formData.priority} onValueChange={(value) => handleSelectChange("priority", value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="urgent">Urgent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Subject */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold">
-                    Subject <span className="text-destructive">*</span>
-                  </label>
-                  <Input
-                    name="subject"
-                    placeholder="Brief subject of your issue..."
-                    value={formData.subject}
-                    onChange={handleInputChange}
-                    maxLength={100}
-                  />
-                  <p className="text-xs text-muted-foreground">{formData.subject.length}/100 characters</p>
-                </div>
-
-                {/* Description */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold">
-                    Description <span className="text-destructive">*</span>
-                  </label>
-                  <Textarea
-                    name="description"
-                    placeholder="Please provide detailed information about your issue..."
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    maxLength={2000}
-                    rows={6}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {formData.description.length}/2000 characters
+          {/* Right - Form */}
+          <div className="lg:col-span-2">
+            <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8">
+              {submitted ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="h-16 w-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-6 animate-pulse">
+                    <CheckCircle className="h-8 w-8 text-white" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Message Sent!</h2>
+                  <p className="text-slate-400 max-w-sm">
+                    Thank you for reaching out. Our support team will review your request and respond shortly.
                   </p>
                 </div>
+              ) : !isAuthenticated ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-6">
+                    <Mail className="h-8 w-8 text-white" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Login Required</h2>
+                  <p className="text-slate-400 mb-6">Please log in to submit a support request.</p>
+                  <Button
+                    onClick={() => navigate("/login")}
+                    className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold h-11 px-8 rounded-xl flex items-center gap-2 transition-all hover:scale-105"
+                  >
+                    Go to Login
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* User Info */}
+                  <div className="flex items-center gap-4 bg-slate-700/30 rounded-xl p-4 border border-slate-600/30">
+                    <div className="h-12 w-12 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+                      {(user?.name || "U").charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-white font-semibold text-sm">{user?.name}</p>
+                      <p className="text-slate-400 text-xs">{user?.email}</p>
+                    </div>
+                  </div>
 
-                {/* Submit Button */}
-                <Button type="submit" size="lg" className="w-full gap-2" disabled={loading}>
-                  <Send className="h-4 w-4" />
-                  {loading ? "Submitting..." : "Submit Request"}
-                </Button>
-              </form>
-            )}
-          </CardContent>
-        </Card>
+                  {/* Problem Type & Priority */}
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-white font-semibold text-sm mb-2">
+                        Problem Type <span className="text-red-400">*</span>
+                      </label>
+                      <Select value={formData.problemType} onValueChange={(value) => handleSelectChange("problemType", value)}>
+                        <SelectTrigger className="bg-slate-700/50 border-slate-600/50 text-white rounded-xl h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                          <SelectValue placeholder="Select problem type..." />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700">
+                          {problemTypes.map((type) => (
+                            <SelectItem key={type.value} value={type.value} className="text-white">
+                              {type.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-        {/* Average Response Time */}
-        <div className="text-center mt-8 text-muted-foreground">
-          <p className="text-sm">⏱️ Average response time: 24-48 hours</p>
+                    <div>
+                      <label className="block text-white font-semibold text-sm mb-2">Priority</label>
+                      <Select value={formData.priority} onValueChange={(value) => handleSelectChange("priority", value)}>
+                        <SelectTrigger className="bg-slate-700/50 border-slate-600/50 text-white rounded-xl h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700">
+                          {[
+                            { value: "low", label: "🟢 Low" },
+                            { value: "medium", label: "🟡 Medium" },
+                            { value: "high", label: "🟠 High" },
+                            { value: "urgent", label: "🔴 Urgent" },
+                          ].map((p) => (
+                            <SelectItem key={p.value} value={p.value} className="text-white">
+                              {p.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Subject */}
+                  <div>
+                    <label className="block text-white font-semibold text-sm mb-2">
+                      Subject <span className="text-red-400">*</span>
+                    </label>
+                    <Input
+                      name="subject"
+                      placeholder="Brief subject of your issue..."
+                      value={formData.subject}
+                      onChange={handleInputChange}
+                      maxLength={100}
+                      className="bg-slate-700/50 border-slate-600/50 text-white placeholder:text-slate-500 rounded-xl h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    />
+                    <p className="text-slate-400 text-xs mt-1">{formData.subject.length}/100 characters</p>
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="block text-white font-semibold text-sm mb-2">
+                      Description <span className="text-red-400">*</span>
+                    </label>
+                    <Textarea
+                      name="description"
+                      placeholder="Please provide detailed information about your issue..."
+                      value={formData.description}
+                      onChange={handleInputChange}
+                      maxLength={2000}
+                      rows={5}
+                      className="bg-slate-700/50 border-slate-600/50 text-white placeholder:text-slate-500 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 resize-none"
+                    />
+                    <p className="text-slate-400 text-xs mt-1">{formData.description.length}/2000 characters</p>
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full h-12 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold flex items-center justify-center gap-2 transition-all duration-200 hover:scale-[1.02] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        Submit Request
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
         </div>
+      </div>
+
+      {/* Footer note */}
+      <div className="relative mt-16 pb-12 text-center">
+        <p className="text-slate-400 text-sm">
+          <Clock className="h-4 w-4 inline mr-2" />
+          Average response time: 24–48 hours
+        </p>
       </div>
     </div>
   );
