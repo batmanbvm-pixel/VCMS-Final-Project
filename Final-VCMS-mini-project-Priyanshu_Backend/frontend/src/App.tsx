@@ -184,26 +184,12 @@ const router = createBrowserRouter([
     ),
   },
   {
-    path: "/contact",
-    element: (
-      <AuthProvider>
-        <ClinicProvider>
-          <Layout>
-            <PublicContactUs />
-          </Layout>
-        </ClinicProvider>
-      </AuthProvider>
-    ),
-  },
-  {
     path: "/contact-us",
     element: (
       <AuthProvider>
         <ClinicProvider>
           <Layout>
-            <ProtectedRoute allowedRoles={["doctor", "patient", "admin"]}>
-              <PublicContactUs />
-            </ProtectedRoute>
+            <PublicContactUs />
           </Layout>
         </ClinicProvider>
       </AuthProvider>
