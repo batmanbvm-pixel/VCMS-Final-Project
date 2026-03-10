@@ -57,14 +57,23 @@ const normalizeId = (value: any): string => {
   if (!value) return "";
   if (typeof value === "string") return value;
   if (typeof value === "number") return String(value);
+
   if (typeof value === "object") {
-    if (value._id) return normalizeId(value._id);
-    if (value.id) return normalizeId(value.id);
+    // Handle BSON/Mongo ObjectId safely
+    if (typeof value.toHexString === "function") {
+      return value.toHexString();
+    }
+
+    // Prevent recursive self-reference (_id getter pointing to same object)
+    if (value._id && value._id !== value) return normalizeId(value._id);
+    if (value.id && value.id !== value) return normalizeId(value.id);
+
     if (typeof value.toString === "function") {
       const raw = value.toString();
       if (raw && raw !== "[object Object]") return raw;
     }
   }
+
   return String(value);
 };
 
@@ -153,7 +162,8 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Fetch prescriptions from backend
   const fetchPrescriptions = useCallback(async () => {
     try {
-      const res = await api.get('/prescriptions', { params: { limit: 1000 } });
+      const endpoint = user?.role === "doctor" ? "/prescriptions/doctor/list" : "/prescriptions";
+      const res = await api.get(endpoint, { params: { limit: 1000 } });
       const rxs = res.data.prescriptions || res.data.data || res.data?.result?.prescriptions || [];
 
       if (Array.isArray(rxs)) {
@@ -170,7 +180,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (err) {
       setPrescriptions([]);
     }
-  }, []);
+  }, [user?.role]);
 
   // Fetch appointments from backend
   const fetchAppointments = useCallback(async () => {
@@ -182,13 +192,10 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const mappedApts = apts.map(mapAppointmentDbToUI);
         setAppointments(mappedApts);
       }
-
-      // Keep prescription badges/labels in sync across all appointment UIs
-      await fetchPrescriptions();
     } catch (err) {
       setAppointments([]);
     }
-  }, [fetchPrescriptions]);
+  }, []);
 
   // Fetch data on mount and when user changes
   useEffect(() => {

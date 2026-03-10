@@ -34,6 +34,7 @@ interface DoctorCardProps {
 
 export const DoctorCard = ({ doctor, onBookClick, isLoading = false }: DoctorCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
+  const cleanDoctorName = String(doctor.name || "Doctor").replace(/^dr\.?\s*/i, "").trim() || "Doctor";
 
   // Format available days
   const availableDays = doctor.availability
@@ -56,7 +57,7 @@ export const DoctorCard = ({ doctor, onBookClick, isLoading = false }: DoctorCar
         <div className="flex items-start justify-between gap-3">
           {/* Doctor Avatar */}
           <div className="flex-shrink-0 h-12 w-12 rounded-full bg-gradient-to-br from-sky-500 to-sky-600 text-white flex items-center justify-center font-bold text-lg shadow-md">
-            {doctor.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'DR'}
+            {cleanDoctorName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'DR'}
           </div>
 
           {/* Rating */}
@@ -73,7 +74,7 @@ export const DoctorCard = ({ doctor, onBookClick, isLoading = false }: DoctorCar
         {/* Name and Specialization */}
         <div className="mt-2">
           <CardTitle className="text-lg leading-tight">
-            Dr. {doctor.name || 'Doctor'}
+            Dr. {cleanDoctorName}
           </CardTitle>
           <p className="text-sm text-sky-600 font-medium mt-1">
             {doctor.specialization || 'General Medicine'}
@@ -145,10 +146,10 @@ export const DoctorCard = ({ doctor, onBookClick, isLoading = false }: DoctorCar
         <Button
           onClick={() => onBookClick(doctor._id)}
           disabled={isLoading}
-          className="w-full btn-premium gap-2"
+          className="w-full h-10 text-sm px-3 bg-sky-500 hover:bg-sky-600 text-white rounded-xl gap-2"
         >
           <VideoIcon className="h-4 w-4" />
-          {isLoading ? 'Booking...' : 'Book Consultation'}
+          {isLoading ? 'Booking...' : 'Book Now'}
         </Button>
       </div>
     </Card>

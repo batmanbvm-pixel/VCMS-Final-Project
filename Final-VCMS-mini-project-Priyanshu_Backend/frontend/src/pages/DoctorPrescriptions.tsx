@@ -3,12 +3,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/EmptyState";
 import { PatientMedicalHistoryButton } from "@/components/PatientMedicalHistoryButton";
 import api from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Search, Calendar, User, Pill, ArrowRight } from "lucide-react";
+import { FileText, Calendar, User, Pill, ArrowRight, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface Prescription {
@@ -37,6 +37,8 @@ export const DoctorPrescriptions = () => {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'draft' | 'issued'>('all');
 
   useEffect(() => {
     fetchPrescriptions();
@@ -65,9 +67,26 @@ export const DoctorPrescriptions = () => {
     }
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchPrescriptions();
+      toast({ title: "Refreshed", description: "Prescriptions updated successfully" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to refresh prescriptions", variant: "destructive" });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const filteredPrescriptions = prescriptions.filter((rx) => {
     const patientName = typeof rx.patientId === 'object' && rx.patientId?.name ? rx.patientId.name : '';
-    return patientName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = patientName.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (activeFilter === 'all') return matchesSearch;
+    if (activeFilter === 'draft') return matchesSearch && rx.status === 'draft';
+    if (activeFilter === 'issued') return matchesSearch && rx.status === 'issued';
+    return matchesSearch;
   });
 
   const stats = {
@@ -77,155 +96,186 @@ export const DoctorPrescriptions = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-primary/5 container mx-auto px-4 py-8 space-y-6 max-w-7xl pb-12">
+    <div className="container mx-auto px-6 py-8 space-y-6 max-w-7xl pb-12">
       {/* Header */}
-      <div className="rounded-xl bg-sky-500 p-6 text-white shadow-md border border-sky-300">
-        <div className="flex items-center gap-3 mb-2">
-          <Pill className="h-8 w-8" />
-          <h1 className="text-3xl font-bold">My Prescriptions</h1>
+      <div className="rounded-xl bg-sky-500 text-white p-6 shadow-md border border-sky-300">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <Pill className="h-7 w-7" /> My Prescriptions
+            </h1>
+            <p className="mt-2 text-white/90 text-sm">Total: {stats.total} • Draft: {stats.draft} • Issued: {stats.issued}</p>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-2 bg-white/15 text-white border-white/30 hover:bg-white/25 transition-all duration-200 hover:scale-105" 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> 
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
         </div>
-        <p className="text-white/80">Manage all prescriptions you've created for patients</p>
       </div>
 
-      {/* Stats */}
-      <Card className="border-0 shadow-lg">
-        <CardContent className="pt-6">
-          <p className="text-sm text-muted-foreground">Total Prescriptions</p>
-          <p className="text-3xl font-bold mt-2 text-sky-600">{stats.total}</p>
-        </CardContent>
-      </Card>
-
-      {/* Filters */}
-      <Card className="border-0 shadow-lg">
-        <CardContent className="pt-6">
-          <div className="flex gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by patient name..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            {searchTerm.trim() && (
-              <Button
-                variant="outline"
-                onClick={() => setSearchTerm("")}
-                className="text-red-700 border-red-300 bg-red-50 hover:bg-red-100"
-              >
-                Clear Filters
-              </Button>
-            )}
+      {/* Filter Tabs */}
+      <Card className="border-slate-200 shadow-sm bg-white rounded-xl overflow-hidden">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => setActiveFilter('all')}
+              variant={activeFilter === 'all' ? 'default' : 'outline'}
+              className={`h-9 px-4 ${
+                activeFilter === 'all'
+                  ? 'bg-sky-500 hover:bg-sky-600 text-white'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              All ({stats.total})
+            </Button>
+            <Button
+              onClick={() => setActiveFilter('draft')}
+              variant={activeFilter === 'draft' ? 'default' : 'outline'}
+              className={`h-9 px-4 ${
+                activeFilter === 'draft'
+                  ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Draft ({stats.draft})
+            </Button>
+            <Button
+              onClick={() => setActiveFilter('issued')}
+              variant={activeFilter === 'issued' ? 'default' : 'outline'}
+              className={`h-9 px-4 ${
+                activeFilter === 'issued'
+                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Issued ({stats.issued})
+            </Button>
           </div>
         </CardContent>
       </Card>
 
       {/* Prescriptions List */}
       {loading ? (
-        <Card className="border-0 shadow-lg">
-          <CardContent className="pt-6 text-center">
-            <p className="text-muted-foreground">Loading prescriptions...</p>
+        <Card className="border-slate-200 shadow-sm bg-white rounded-xl">
+          <CardContent className="py-16">
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-12 w-12 rounded-full bg-sky-100 flex items-center justify-center animate-pulse">
+                <FileText className="h-6 w-6 text-sky-600" />
+              </div>
+              <p className="text-center text-slate-600 font-medium">Loading prescriptions...</p>
+            </div>
           </CardContent>
         </Card>
       ) : filteredPrescriptions.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          title="No prescriptions found"
-          description={
-            searchTerm
-              ? "Try adjusting your search or filters"
-              : "Start creating prescriptions for your patients"
-          }
-          action={
-            !searchTerm
-              ? {
-                  label: "Create New Prescription",
-                  onClick: () => navigate("/doctor/today"),
-                }
-              : undefined
-          }
-          variant="info"
-        />
+        <Card className="border-slate-200 shadow-sm bg-white rounded-xl">
+          <CardContent className="py-16">
+            <EmptyState
+              icon={FileText}
+              title={activeFilter === 'all' ? "No prescriptions found" : "No prescriptions match this filter"}
+              description={
+                searchTerm
+                  ? "Try adjusting your search or filters"
+                  : activeFilter === 'all'
+                  ? "Start creating prescriptions for your patients"
+                  : "Try selecting a different status filter"
+              }
+            />
+          </CardContent>
+        </Card>
       ) : (
-        <div className="space-y-3">
-          {filteredPrescriptions.map((rx) => (
-            <Card
-              key={rx._id}
-              className="border-0 shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
-              onClick={() => navigate(`/prescriptions/${rx._id}`)}
-            >
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div className="flex-1 min-w-0">
-                    {/* Patient Info */}
-                    <div className="flex items-center justify-between gap-3 mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100">
-                          <User className="h-5 w-5 text-sky-600" />
+        <Card className="border-slate-200 shadow-sm bg-white rounded-xl overflow-hidden">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50 hover:bg-slate-50">
+                    <TableHead className="min-w-[220px]">Patient</TableHead>
+                    <TableHead className="min-w-[140px]">Diagnosis</TableHead>
+                    <TableHead className="min-w-[120px]">Medicines</TableHead>
+                    <TableHead className="min-w-[140px]">Date</TableHead>
+                    <TableHead className="min-w-[100px]">Status</TableHead>
+                    <TableHead className="text-right min-w-[140px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPrescriptions.map((rx) => (
+                    <TableRow key={rx._id} className="hover:bg-slate-50/60">
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-9 w-9 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
+                            <User className="h-5 w-5 text-sky-600" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-slate-900">{rx.patientId?.name || 'Patient'}</div>
+                            <div className="text-xs text-slate-600">{rx.patientId?.email || ''}</div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold text-foreground">{rx.patientId?.name || 'Patient'}</p>
-                          <p className="text-xs text-muted-foreground">{rx.patientId?.email || ''}</p>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm text-slate-700 max-w-xs truncate">{rx.diagnosis || '—'}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          <span className="text-sm font-medium text-slate-700">{rx.medications.length}</span>
+                          <span className="text-xs text-slate-600">medicine{rx.medications.length !== 1 ? 's' : ''}</span>
                         </div>
-                      </div>
-                      {rx.patientId?._id && (
-                        <PatientMedicalHistoryButton
-                          patientId={rx.patientId._id}
-                          patientName={rx.patientId.name || 'Patient'}
-                          variant="outline"
-                          size="sm"
-                          className="border-sky-200 text-sky-600 hover:bg-sky-50"
-                        />
-                      )}
-                    </div>
-
-                    {/* Prescription Details */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Pill className="h-4 w-4" />
-                        <span>{rx.medications.length} medicine{rx.medications.length !== 1 ? "s" : ""}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        <span>{new Date(rx.createdAt).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-
-                    {/* Medicines Preview */}
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {rx.medications.slice(0, 3).map((med, idx) => (
-                        <Badge key={idx} variant="secondary" className="text-xs">
-                          {med.name}
-                        </Badge>
-                      ))}
-                      {rx.medications.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{rx.medications.length - 3} more
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Status & Action */}
-                  <div className="flex flex-col items-end gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/prescriptions/${rx._id}`);
-                      }}
-                      className="text-sky-600 hover:text-sky-700 hover:bg-sky-50"
-                    >
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm text-slate-700">
+                          {new Date(rx.createdAt).toLocaleDateString('en-IN', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          rx.status === 'issued'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {rx.status === 'issued' ? '✓ Issued' : '✎ Draft'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {rx.patientId?._id && (
+                          <div className="flex gap-1 justify-end">
+                            <PatientMedicalHistoryButton
+                              patientId={rx.patientId._id}
+                              patientName={rx.patientId.name || 'Patient'}
+                              variant="outline"
+                              size="xs"
+                              className="h-7 px-2 border-sky-200 text-sky-700 hover:bg-sky-50 text-xs"
+                            />
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              className="h-7 px-2 gap-1 bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100 text-xs font-medium"
+                              onClick={() => navigate(`/prescriptions/${rx._id}`)}
+                            >
+                              <ArrowRight className="h-3 w-3" />
+                              View
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

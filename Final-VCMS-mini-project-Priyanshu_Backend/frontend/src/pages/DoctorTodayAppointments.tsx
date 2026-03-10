@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Clock, Video, CheckCircle, XCircle, AlertTriangle, CalendarDays, RefreshCw } from "lucide-react";
+import { Clock, Video, CheckCircle, XCircle, AlertTriangle, CalendarDays, RefreshCw, User, FileText, FilePen } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { EmptyState } from "@/components/EmptyState";
@@ -22,12 +22,24 @@ interface RejectDialogState {
 
 const DoctorTodayAppointments = () => {
   const { user } = useAuth();
-  const { appointments, acceptAppointment, rejectAppointment, updateAppointmentStatus, getPrescriptionByAppointment, fetchAppointments } = useClinic();
+  const { appointments, acceptAppointment, rejectAppointment, updateAppointmentStatus, getPrescriptionByAppointment, fetchAppointments, fetchPrescriptions } = useClinic();
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const [activeFilter, setActiveFilter] = useState<'today' | 'upcoming' | 'completed' | 'all'>('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const today = new Date().toISOString().split("T")[0];
   const normalizeStatus = (status?: string) => String(status || "").toLowerCase();
+
+  // Helper to capitalize names properly
+  const capitalizeName = (name?: string) => {
+    if (!name) return "";
+    return name
+      .split(" ")
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  };
 
   const myAppointments = appointments.filter((a) => a.doctorId === user?._id || a.doctorId === user?.id);
 
@@ -103,16 +115,20 @@ const DoctorTodayAppointments = () => {
     if (statusLower === "booked") {
       return (
         <div className="flex flex-wrap gap-2 justify-end">
-          <Button size="sm" onClick={() => acceptAppointment(appointmentId)} className="h-8 gap-1 bg-sky-500 hover:bg-sky-600 text-white">
-            <CheckCircle className="h-3 w-3" /> Accept
+          <Button 
+            size="sm" 
+            onClick={() => acceptAppointment(appointmentId)} 
+            className="h-8 gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm font-medium"
+          >
+            <CheckCircle className="h-3.5 w-3.5" /> Accept
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="h-8 bg-red-100 text-red-700 border-red-200 hover:bg-red-200"
+            className="h-8 gap-1.5 bg-red-50 text-red-600 border-red-200 hover:bg-red-100 shadow-sm font-medium"
             onClick={() => setRejectDialog({ open: true, appointmentId, reason: "", loading: false })}
           >
-            <XCircle className="h-3 w-3 mr-1" /> Reject
+            <XCircle className="h-3.5 w-3.5" /> Reject
           </Button>
         </div>
       );
@@ -123,15 +139,21 @@ const DoctorTodayAppointments = () => {
         <div className="flex flex-wrap gap-2 justify-end">
           <Button
             size="sm"
-            className="h-8 gap-1 bg-sky-500 hover:bg-sky-600 text-white"
+            className="h-8 gap-1.5 bg-violet-500 hover:bg-violet-600 text-white shadow-sm font-medium"
             onClick={() => {
               updateAppointmentStatus(appointmentId, "In Progress");
               navigate(`/video/${appointmentId}`);
             }}
           >
-            <Video className="h-3 w-3" /> Join Call
+            <Video className="h-3.5 w-3.5" /> Join Call
           </Button>
-          <Button size="sm" variant="outline" className="h-8 bg-emerald-100 border-emerald-200 text-emerald-700 hover:bg-emerald-200" onClick={() => updateAppointmentStatus(appointmentId, "Completed")}>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="h-8 gap-1.5 bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 shadow-sm font-medium" 
+            onClick={() => updateAppointmentStatus(appointmentId, "Completed")}
+          >
+            <CheckCircle className="h-3.5 w-3.5" />
             Mark Completed
           </Button>
         </div>
@@ -141,10 +163,20 @@ const DoctorTodayAppointments = () => {
     if (statusLower === "in progress" || statusLower === "in-progress") {
       return (
         <div className="flex flex-wrap gap-2 justify-end">
-          <Button size="sm" className="h-8 gap-1 bg-sky-500 hover:bg-sky-600 text-white" onClick={() => navigate(`/video/${appointmentId}`)}>
-            <Video className="h-3 w-3" /> Join Call
+          <Button 
+            size="sm" 
+            className="h-8 gap-1.5 bg-violet-500 hover:bg-violet-600 text-white shadow-sm font-medium" 
+            onClick={() => navigate(`/video/${appointmentId}`)}
+          >
+            <Video className="h-3.5 w-3.5" /> Join Call
           </Button>
-          <Button size="sm" variant="outline" className="h-8 bg-emerald-100 border-emerald-200 text-emerald-700 hover:bg-emerald-200" onClick={() => updateAppointmentStatus(appointmentId, "Completed")}>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="h-8 gap-1.5 bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 shadow-sm font-medium" 
+            onClick={() => updateAppointmentStatus(appointmentId, "Completed")}
+          >
+            <CheckCircle className="h-3.5 w-3.5" />
             Complete
           </Button>
         </div>
@@ -154,14 +186,31 @@ const DoctorTodayAppointments = () => {
     if (statusLower === "completed") {
       return (
         <div className="flex flex-wrap gap-2 justify-end">
-          <Button size="sm" variant="outline" className="h-8 gap-1 bg-sky-100 border-sky-200 text-sky-700 hover:bg-sky-200" onClick={() => navigate(`/create-prescription/${appointmentId}`)}>
-            <CheckCircle className="h-3 w-3" /> {rx ? "Edit Prescription" : "Write Prescription"}
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="h-8 gap-1.5 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 shadow-sm font-medium" 
+            onClick={() => navigate(`/create-prescription/${appointmentId}`)}
+          >
+            <FilePen className="h-3.5 w-3.5" /> {rx ? "Edit Prescription" : "Write Prescription"}
           </Button>
         </div>
       );
     }
 
     return <span className="text-xs text-slate-500">—</span>;
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([fetchAppointments(), fetchPrescriptions()]);
+      toast({ title: "Refreshed", description: "Appointments updated successfully" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to refresh appointments", variant: "destructive" });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const renderAppointmentsTable = (title: string, list: any[]) => (
@@ -189,8 +238,15 @@ const DoctorTodayAppointments = () => {
                   return (
                     <TableRow key={appointmentId} className="hover:bg-slate-50/60">
                       <TableCell>
-                        <div className="font-medium text-slate-900">{apt.patientName}</div>
-                        <div className="text-xs text-slate-600 mt-0.5">Age: {apt.patientAge || "—"} • {apt.patientMedicalHistory || "No history"}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="h-9 w-9 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
+                            <User className="h-5 w-5 text-sky-600" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-slate-900">{capitalizeName(apt.patientName)}</div>
+                            <div className="text-xs text-slate-600 mt-0.5">Age: {apt.patientAge || "—"} • {apt.patientMedicalHistory || "No history"}</div>
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="text-sm text-slate-900">{apt.date}</div>
@@ -218,13 +274,17 @@ const DoctorTodayAppointments = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-8 text-xs bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
+                            className="h-8 text-xs gap-1.5 bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-medium"
                             onClick={() => navigate(rx?._id ? `/prescriptions/${rx._id}` : `/prescriptions/appointment/${appointmentId}`)}
                           >
+                            <FileText className="h-3.5 w-3.5" />
                             View Rx
                           </Button>
                         ) : (
-                          <span className="text-xs text-slate-500">No Rx</span>
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200">
+                            <FileText className="h-3.5 w-3.5 text-slate-400" />
+                            <span className="text-xs text-slate-500 font-medium">No Rx</span>
+                          </div>
                         )}
                       </TableCell>
                       <TableCell className="text-right">{renderActionButtons(apt)}</TableCell>
@@ -249,11 +309,74 @@ const DoctorTodayAppointments = () => {
             </h1>
             <p className="mt-2 text-white/90 text-sm">Today: {todayAppointments.length} • Upcoming: {upcomingAppointments.length} • Completed: {completedAppointments.length}</p>
           </div>
-          <Button variant="outline" size="sm" className="gap-2 bg-white/15 text-white border-white/30 hover:bg-white/25 transition-all duration-200 hover:scale-105" onClick={() => fetchAppointments()}>
-            <RefreshCw className="h-4 w-4" /> Refresh
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-2 bg-white/15 text-white border-white/30 hover:bg-white/25 transition-all duration-200 hover:scale-105" 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> 
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
       </div>
+
+      {/* Filter Tabs */}
+      <Card className="border-slate-200 shadow-sm bg-white rounded-xl overflow-hidden">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => setActiveFilter('all')}
+              variant={activeFilter === 'all' ? 'default' : 'outline'}
+              className={`h-9 px-4 ${
+                activeFilter === 'all'
+                  ? 'bg-sky-500 hover:bg-sky-600 text-white'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <CalendarDays className="h-4 w-4 mr-2" />
+              All ({todayAppointments.length + upcomingAppointments.length + completedAppointments.length})
+            </Button>
+            <Button
+              onClick={() => setActiveFilter('today')}
+              variant={activeFilter === 'today' ? 'default' : 'outline'}
+              className={`h-9 px-4 ${
+                activeFilter === 'today'
+                  ? 'bg-sky-500 hover:bg-sky-600 text-white'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Clock className="h-4 w-4 mr-2" />
+              Today ({todayAppointments.length})
+            </Button>
+            <Button
+              onClick={() => setActiveFilter('upcoming')}
+              variant={activeFilter === 'upcoming' ? 'default' : 'outline'}
+              className={`h-9 px-4 ${
+                activeFilter === 'upcoming'
+                  ? 'bg-sky-500 hover:bg-sky-600 text-white'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Upcoming ({upcomingAppointments.length})
+            </Button>
+            <Button
+              onClick={() => setActiveFilter('completed')}
+              variant={activeFilter === 'completed' ? 'default' : 'outline'}
+              className={`h-9 px-4 ${
+                activeFilter === 'completed'
+                  ? 'bg-sky-500 hover:bg-sky-600 text-white'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Completed ({completedAppointments.length})
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {todayAppointments.length === 0 && upcomingAppointments.length === 0 && completedAppointments.length === 0 && (
         <Card className="border-slate-200 shadow-sm bg-white rounded-xl">
@@ -263,11 +386,11 @@ const DoctorTodayAppointments = () => {
         </Card>
       )}
 
-      {todayAppointments.length > 0 && renderAppointmentsTable("Today's Appointments", todayAppointments)}
+      {(activeFilter === 'all' || activeFilter === 'today') && todayAppointments.length > 0 && renderAppointmentsTable("Today's Appointments", todayAppointments)}
 
-      {upcomingAppointments.length > 0 && renderAppointmentsTable("Upcoming Appointments", upcomingAppointments)}
+      {(activeFilter === 'all' || activeFilter === 'upcoming') && upcomingAppointments.length > 0 && renderAppointmentsTable("Upcoming Appointments", upcomingAppointments)}
 
-      {completedAppointments.length > 0 && renderAppointmentsTable("Completed Appointments", completedAppointments)}
+      {(activeFilter === 'all' || activeFilter === 'completed') && completedAppointments.length > 0 && renderAppointmentsTable("Completed Appointments", completedAppointments)}
 
       <Dialog open={rejectDialog.open} onOpenChange={(open) => setRejectDialog((prev) => ({ ...prev, open }))}>
         <DialogContent>

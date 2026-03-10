@@ -4,6 +4,23 @@ const MedicalHistory = require("../models/MedicalHistory");
 const Notification = require("../models/Notification");
 const socketHandler = require('../utils/socketHandler');
 
+const normalizeMedications = (medications = []) => {
+  if (!Array.isArray(medications)) return [];
+
+  return medications
+    .map((m = {}) => ({
+      name: String(m.name || '').trim(),
+      dosage: String(m.dosage || '').trim(),
+      frequency: String(m.frequency || '').trim(),
+      duration: String(m.duration || '').trim(),
+      instructions: String(m.instructions || '').trim(),
+      quantity: Number.isFinite(Number(m.quantity)) ? Number(m.quantity) : 0,
+      refills: Number.isFinite(Number(m.refills)) ? Number(m.refills) : 0,
+      sideEffects: Array.isArray(m.sideEffects) ? m.sideEffects.filter(Boolean) : [],
+    }))
+    .filter((m) => m.name && m.dosage && m.frequency && m.duration);
+};
+
 // Create prescription (draft status - doctor only)
 const createPrescription = async (req, res) => {
   try {
@@ -16,6 +33,11 @@ const createPrescription = async (req, res) => {
     // Validation
     if (!appointmentId || !medications || !Array.isArray(medications) || medications.length === 0 || !diagnosis) {
       return res.status(400).json({ message: "appointmentId, medications (array), and diagnosis are required" });
+    }
+
+    const normalizedMedications = normalizeMedications(medications);
+    if (normalizedMedications.length === 0) {
+      return res.status(400).json({ message: "At least one complete medication (name, dosage, frequency, duration) is required" });
     }
 
     if (!validUntil) {
@@ -55,16 +77,7 @@ const createPrescription = async (req, res) => {
       medicalHistoryId,
       patientId: appointment.patientId,
       doctorId: req.user._id,
-      medications: medications.map(m => ({
-        name: m.name,
-        dosage: m.dosage,
-        frequency: m.frequency,
-        duration: m.duration,
-        instructions: m.instructions || '',
-        quantity: m.quantity || 0,
-        refills: m.refills || 0,
-        sideEffects: Array.isArray(m.sideEffects) ? m.sideEffects : [],
-      })),
+      medications: normalizedMedications,
       diagnosis,
       clinicalNotes: clinicalNotes || '',
       treatmentPlan: treatmentPlan || '',
@@ -503,17 +516,12 @@ const updatePrescription = async (req, res) => {
       return res.status(400).json({ message: 'Only draft prescriptions can be updated' });
     }
 
-    if (medications && Array.isArray(medications)) {
-      prescription.medications = medications.map(m => ({
-        name: m.name,
-        dosage: m.dosage,
-        frequency: m.frequency,
-        duration: m.duration,
-        instructions: m.instructions || '',
-        quantity: m.quantity || 0,
-        refills: m.refills || 0,
-        sideEffects: Array.isArray(m.sideEffects) ? m.sideEffects : [],
-      }));
+    if (medications !== undefined) {
+      const normalizedMedications = normalizeMedications(medications);
+      if (normalizedMedications.length === 0) {
+        return res.status(400).json({ message: 'At least one complete medication (name, dosage, frequency, duration) is required' });
+      }
+      prescription.medications = normalizedMedications;
     }
     if (diagnosis !== undefined) {
       prescription.diagnosis = diagnosis;
@@ -662,14 +670,24 @@ const getDoctorPrescriptions = async (req, res) => {
       .limit(parseInt(limit))
       .sort({ createdAt: -1 });
 
+    const sanitizedPrescriptions = prescriptions
+      .map((rx) => {
+        const obj = rx.toObject ? rx.toObject() : rx;
+        obj.medications = normalizeMedications(obj.medications);
+        return obj;
+      })
+      .filter((rx) => !(rx.status === 'draft' && rx.medications.length === 0));
+
+    const responseTotal = Math.min(total, skip + sanitizedPrescriptions.length);
+
     res.json({
       success: true,
-      prescriptions,
+      prescriptions: sanitizedPrescriptions,
       pagination: {
-        total,
+        total: responseTotal,
         page: parseInt(page),
         limit: parseInt(limit),
-        pages: Math.ceil(total / parseInt(limit)),
+        pages: Math.max(1, Math.ceil(responseTotal / parseInt(limit))),
       },
     });
   } catch (error) {

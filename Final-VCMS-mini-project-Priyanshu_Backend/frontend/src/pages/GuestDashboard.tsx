@@ -35,6 +35,34 @@ const SYMPTOM_TO_SPECIALIZATION: Record<string, string[]> = {
   "acne": ["Dermatology"],
   "hair loss": ["Dermatology"],
   "high blood pressure": ["Cardiology"],
+  "high bp": ["Cardiology"],
+  "shortness of breath": ["Cardiology", "Pulmonology"],
+};
+
+const SPECIALIZATION_EQUIVALENTS: Record<string, string[]> = {
+  "cardiology": ["cardiologist", "heart specialist"],
+  "dermatology": ["dermatologist", "skin specialist"],
+  "orthopedics": ["orthopedic", "orthopaedic", "orthopedist"],
+  "neurology": ["neurologist"],
+  "gastroenterology": ["gastroenterologist"],
+  "physiotherapy": ["physiotherapist"],
+  "general medicine": ["general physician", "physician", "internal medicine"],
+  "infectious disease": ["infectious diseases"],
+  "rheumatology": ["rheumatologist"],
+  "pulmonology": ["pulmonologist", "chest physician"],
+};
+
+const normalizeText = (v: string) => String(v || "").trim().toLowerCase();
+
+const specializationMatches = (doctorSpecialization: string, requiredSpecialization: string) => {
+  const docSpec = normalizeText(doctorSpecialization);
+  const reqSpec = normalizeText(requiredSpecialization);
+  if (!docSpec || !reqSpec) return false;
+
+  if (docSpec.includes(reqSpec) || reqSpec.includes(docSpec)) return true;
+
+  const aliases = SPECIALIZATION_EQUIVALENTS[reqSpec] || [];
+  return aliases.some((alias) => docSpec.includes(normalizeText(alias)) || normalizeText(alias).includes(docSpec));
 };
 
 const GuestDashboard = () => {
@@ -129,11 +157,13 @@ const GuestDashboard = () => {
     return doctors.filter((doc) => {
       // If symptoms are selected, doctor must match at least one symptom
       if (selectedSymptoms.length > 0) {
-        const matchesSymptom = selectedSymptoms.some((symptom) => {
-          const requiredSpecializations = SYMPTOM_TO_SPECIALIZATION[symptom.toLowerCase()] || [];
-          return requiredSpecializations.some((spec) =>
-            doc.specialization?.toLowerCase().includes(spec.toLowerCase())
-          );
+        const matchesSymptom = selectedSymptoms.some((symptomName) => {
+          const card = SYMPTOM_CARDS.find((c) => c.name === symptomName);
+          const fromKeywords = (card?.keywords || []).flatMap((kw) => SYMPTOM_TO_SPECIALIZATION[kw.toLowerCase()] || []);
+          const fromName = SYMPTOM_TO_SPECIALIZATION[symptomName.toLowerCase()] || [];
+          const requiredSpecializations = [...new Set([...fromKeywords, ...fromName])];
+
+          return requiredSpecializations.some((spec) => specializationMatches(doc.specialization || "", spec));
         });
         if (!matchesSymptom) return false;
       }
@@ -384,7 +414,7 @@ const GuestDashboard = () => {
             <>
               {viewMode === "card" ? (
                 // CARD VIEW - Using DoctorCard Component
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="grid md:grid-cols-2 2xl:grid-cols-3 gap-6">
                   {filteredDoctors.map((doc) => (
                     <DoctorCard
                       key={doc._id}

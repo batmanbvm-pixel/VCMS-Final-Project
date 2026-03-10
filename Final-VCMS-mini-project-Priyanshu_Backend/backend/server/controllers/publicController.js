@@ -11,16 +11,22 @@ const { parseLocationFields } = require('../utils/locationParser');
 // Helper to map internal User -> PublicDoctorProfile shape expected by frontend
 function mapUserToPublicProfile(u) {
   // ensure we always return a usable name and at least some location info
-  let rawName = u.displayName || u.name || '';
-  // if the stored name is just the specialization, ignore it
-  if (rawName && u.specialization) {
-    const normalized = rawName
+  const isGenericName = (candidate = '', specialization = '') => {
+    const normalized = String(candidate || '')
       .replace(/^dr\.?\s*/i, '')
       .replace(/\s+specialist$/i, '')
-      .trim();
-    if (normalized.toLowerCase() === u.specialization.toLowerCase()) {
-      rawName = '';
-    }
+      .trim()
+      .toLowerCase();
+    const spec = String(specialization || '').trim().toLowerCase();
+    return !!normalized && !!spec && normalized === spec;
+  };
+
+  const candidateNames = [u.name, u.displayName].filter(Boolean);
+  let rawName = candidateNames.find((n) => !isGenericName(n, u.specialization)) || candidateNames[0] || '';
+
+  // if the chosen name is still just specialization, ignore it
+  if (rawName && u.specialization && isGenericName(rawName, u.specialization)) {
+    rawName = '';
   }
   const fallbackName = rawName || u.specialization || 'Doctor';
   const rawLocation = u.location || '';
@@ -63,15 +69,20 @@ function mapUserToPublicProfile(u) {
 
 // Fallback: map raw PublicDoctor document (legacy collection) to frontend shape
 function mapRawPublicDoctor(pd) {
-  let rawName = pd.displayName || pd.name || '';
-  if (rawName && pd.specialization) {
-    const normalized = rawName
+  const isGenericName = (candidate = '', specialization = '') => {
+    const normalized = String(candidate || '')
       .replace(/^dr\.?\s*/i, '')
       .replace(/\s+specialist$/i, '')
-      .trim();
-    if (normalized.toLowerCase() === pd.specialization.toLowerCase()) {
-      rawName = '';
-    }
+      .trim()
+      .toLowerCase();
+    const spec = String(specialization || '').trim().toLowerCase();
+    return !!normalized && !!spec && normalized === spec;
+  };
+
+  const candidateNames = [pd.name, pd.displayName].filter(Boolean);
+  let rawName = candidateNames.find((n) => !isGenericName(n, pd.specialization)) || candidateNames[0] || '';
+  if (rawName && pd.specialization && isGenericName(rawName, pd.specialization)) {
+    rawName = '';
   }
   const fallbackName = rawName || pd.specialization || (pd.doctorId ? String(pd.doctorId) : 'Doctor');
   const city = pd.city || '';
@@ -107,6 +118,17 @@ function mapRawPublicDoctor(pd) {
     availablePhysical: typeof pd.availablePhysical === 'boolean' ? pd.availablePhysical : true,
     approvalStatus: pd.approvalStatus || 'approved',
   };
+}
+
+function isGenericDoctorName(name = '', specialization = '') {
+  const n = String(name || '')
+    .replace(/^dr\.?\s*/i, '')
+    .replace(/\s+specialist$/i, '')
+    .trim()
+    .toLowerCase();
+  const s = String(specialization || '').trim().toLowerCase();
+  if (!n || !s) return false;
+  return n === s;
 }
 
 const updateDoctorRatingStats = async (doctorId) => {
@@ -186,8 +208,11 @@ exports.getPublicDoctors = async (req, res) => {
       .limit(parseInt(limit))
       .sort({ reviewCount: -1, rating: -1, createdAt: -1 });
 
-    let mapped = doctors.map(mapUserToPublicProfile);
+    let mapped = doctors
+      .map(mapUserToPublicProfile)
+      .filter((d) => !isGenericDoctorName(d.name, d.specialization));
 
+    total = mapped.length;
 
     res.json({
       success: true,

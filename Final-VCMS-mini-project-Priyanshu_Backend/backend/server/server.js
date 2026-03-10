@@ -278,46 +278,56 @@ io.on("connection", (socket) => {
 
   // ✅ ENHANCED: Video consultation events
   socket.on("video:offer", (data) => {
-    const { to, offer, roomId } = data;
+    const { to, offer, roomId, appointmentId } = data;
+    const userId = onlineUsers.get(socket.id);
     socketHandler.emitToUser(to, "video:offer", {
       offer,
-      from: socket.id,
+      from: userId || socket.id,
       roomId,
-    });
+      appointmentId,
+    }, onlineUsers);
   });
 
   socket.on("video:answer", (data) => {
-    const { to, answer, roomId } = data;
+    const { to, answer, roomId, appointmentId } = data;
+    const userId = onlineUsers.get(socket.id);
     socketHandler.emitToUser(to, "video:answer", {
       answer,
-      from: socket.id,
+      from: userId || socket.id,
       roomId,
-    });
+      appointmentId,
+    }, onlineUsers);
   });
 
   socket.on("video:ice-candidate", (data) => {
-    const { to, candidate, roomId } = data;
+    const { to, candidate, roomId, appointmentId } = data;
+    const userId = onlineUsers.get(socket.id);
     socketHandler.emitToUser(to, "video:ice-candidate", {
       candidate,
-      from: socket.id,
+      from: userId || socket.id,
       roomId,
-    });
+      appointmentId,
+    }, onlineUsers);
   });
 
   socket.on("video:end-call", (data) => {
-    const { to, roomId } = data;
+    const { to, roomId, appointmentId } = data;
+    const userId = onlineUsers.get(socket.id);
     socketHandler.emitToUser(to, "video:end-call", {
-      from: socket.id,
+      from: userId || socket.id,
       roomId,
-    });
+      appointmentId,
+    }, onlineUsers);
   });
 
   // Signal from patient that they are ready — triggers doctor to create WebRTC offer
   socket.on("video:user-ready", (data) => {
-    const { to } = data;
+    const { to, appointmentId } = data;
+    const userId = onlineUsers.get(socket.id);
     socketHandler.emitToUser(to, "video:user-ready", {
-      from: socket.id,
-    });
+      from: userId || socket.id,
+      appointmentId,
+    }, onlineUsers);
   });
 
   // ✅ NEW: Consultation completion event

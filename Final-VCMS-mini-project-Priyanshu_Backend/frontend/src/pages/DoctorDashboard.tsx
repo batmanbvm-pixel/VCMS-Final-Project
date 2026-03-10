@@ -43,6 +43,16 @@ const DoctorDashboard = () => {
 
   const today = new Date().toISOString().split("T")[0];
   const normalizedStatus = (status?: string) => (status || "").toLowerCase();
+  
+  // Helper to capitalize names properly
+  const capitalizeName = (name?: string) => {
+    if (!name) return "";
+    return name
+      .split(" ")
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  };
+
   const myAppointments = appointments.filter((a) => a.doctorId === user?._id || a.doctorId === user?.id);
 
   const pendingAppointments = myAppointments.filter((a) => normalizedStatus(a.status) === "booked" || normalizedStatus(a.status) === "pending");
@@ -52,7 +62,7 @@ const DoctorDashboard = () => {
     const notCancelledOrCompleted = !["cancelled", "completed"].includes(normalizedStatus(a.status));
     return isToday && notCancelledOrCompleted;
   });
-  const upcomingAppointments = myAppointments.filter((a) => a.date > today && ["accepted", "booked"].includes(normalizedStatus(a.status)));
+  const upcomingAppointments = myAppointments.filter((a) => a.date > today && normalizedStatus(a.status) === "accepted");
   const completedAppointments = myAppointments.filter((a) => normalizedStatus(a.status) === "completed");
   const uniquePatients = new Set(myAppointments.filter((a) => normalizedStatus(a.status) !== "cancelled").map((a) => a.patientId)).size;
   // Sum consultation fees from individual completed appointments (more accurate than user?.consultationFee)
@@ -78,6 +88,7 @@ const DoctorDashboard = () => {
   const [recentFeedback, setRecentFeedback] = useState<DoctorFeedback[]>([]);
   const [feedbackSummary, setFeedbackSummary] = useState({ total: 0, averageRating: 0 });
   const [prescriptionsCount, setPrescriptionsCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const seenAppointmentIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -169,6 +180,29 @@ const DoctorDashboard = () => {
       }
     } finally {
       setOnlineLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchAppointments(),
+        fetchUnreadCount(),
+        fetchDoctorFeedback(),
+        fetchPrescriptionsCount(),
+        fetchProfileCompletion(),
+      ]);
+      toast({ title: "✓ Dashboard Refreshed", description: "All data updated successfully" });
+    } catch (error) {
+      toast({ 
+        title: "Refresh Failed", 
+        description: "Some data may not have updated. Please try again.",
+        variant: "destructive" 
+      });
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -300,10 +334,12 @@ const DoctorDashboard = () => {
           </div>
           <div className="flex gap-2 flex-wrap">
             <button
-              onClick={() => { fetchAppointments(); fetchUnreadCount(); fetchDoctorFeedback(); fetchPrescriptionsCount(); toast({ title: "Refreshed!" }); }}
-              className="flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-sm hover:scale-105"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-sm hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> 
+              {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
           </div>
         </div>
@@ -601,7 +637,7 @@ const DoctorDashboard = () => {
                           {(apt.patientName || "?").charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-semibold text-slate-900">{apt.patientName}</p>
+                          <p className="font-semibold text-slate-900">{capitalizeName(apt.patientName)}</p>
                           <p className="text-xs text-slate-600">{apt.symptoms || "General consultation"}</p>
                           <div className="flex items-center gap-3 mt-1 text-xs text-slate-600">
                             <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{apt.date}</span>
@@ -659,7 +695,7 @@ const DoctorDashboard = () => {
                       {(apt.patientName || "?").charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-medium text-sm text-slate-900">{apt.patientName}</p>
+                      <p className="font-medium text-sm text-slate-900">{capitalizeName(apt.patientName)}</p>
                       <p className="text-xs text-slate-600 flex items-center gap-1">
                         <CalendarDays className="h-3 w-3" />{apt.date}
                         <Clock className="h-3 w-3 ml-1" />{apt.time}
@@ -716,7 +752,7 @@ const DoctorDashboard = () => {
                       <div className="flex items-center gap-3">
                         <CheckCircle className="h-5 w-5 text-sky-500 shrink-0" />
                         <div>
-                          <p className="font-medium text-sm text-slate-900">{apt.patientName}</p>
+                          <p className="font-medium text-sm text-slate-900">{capitalizeName(apt.patientName)}</p>
                           <p className="text-xs text-slate-600">{apt.date} • {apt.time}</p>
                         </div>
                       </div>

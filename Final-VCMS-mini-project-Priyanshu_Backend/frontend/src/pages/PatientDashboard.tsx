@@ -74,6 +74,39 @@ const SYMPTOM_TO_SPECIALIZATION: Record<string, string[]> = {
   "acne": ["Dermatology"],
   "hair loss": ["Dermatology"],
   "high blood pressure": ["Cardiology"],
+  "high bp": ["Cardiology"],
+  "shortness of breath": ["Cardiology", "Pulmonology"],
+};
+
+const formatDoctorDisplayName = (name?: string) => {
+  const clean = String(name || "Doctor").replace(/^dr\.?\s*/i, "").trim();
+  return `Dr. ${clean || "Doctor"}`;
+};
+
+const SPECIALIZATION_EQUIVALENTS: Record<string, string[]> = {
+  "cardiology": ["cardiologist", "heart specialist"],
+  "dermatology": ["dermatologist", "skin specialist"],
+  "orthopedics": ["orthopedic", "orthopaedic", "orthopedist"],
+  "neurology": ["neurologist"],
+  "gastroenterology": ["gastroenterologist"],
+  "physiotherapy": ["physiotherapist"],
+  "general medicine": ["general physician", "physician", "internal medicine"],
+  "infectious disease": ["infectious diseases"],
+  "rheumatology": ["rheumatologist"],
+  "pulmonology": ["pulmonologist", "chest physician"],
+};
+
+const normalizeText = (v: string) => String(v || "").trim().toLowerCase();
+
+const specializationMatches = (doctorSpecialization: string, requiredSpecialization: string) => {
+  const docSpec = normalizeText(doctorSpecialization);
+  const reqSpec = normalizeText(requiredSpecialization);
+  if (!docSpec || !reqSpec) return false;
+
+  if (docSpec.includes(reqSpec) || reqSpec.includes(docSpec)) return true;
+
+  const aliases = SPECIALIZATION_EQUIVALENTS[reqSpec] || [];
+  return aliases.some((alias) => docSpec.includes(normalizeText(alias)) || normalizeText(alias).includes(docSpec));
 };
 
 const PatientDashboard = () => {
@@ -272,7 +305,10 @@ const PatientDashboard = () => {
             const relatedSpecs = SYMPTOM_TO_SPECIALIZATION[kw.toLowerCase()] || [];
             return [...acc, ...relatedSpecs];
           }, []);
-          return specs.some((sp) => doc.specialization?.toLowerCase().includes(sp.toLowerCase()));
+          // Fallback: if symptom name itself exists as a key, include those specs too
+          const symptomSpecs = SYMPTOM_TO_SPECIALIZATION[symptomName.toLowerCase()] || [];
+          const allSpecs = [...new Set([...specs, ...symptomSpecs])];
+          return allSpecs.some((sp) => specializationMatches(doc.specialization || "", sp));
         });
         if (!matchesSymptom) return false;
       }
@@ -408,7 +444,7 @@ const PatientDashboard = () => {
         patientAge: user.age || 25,
         patientMedicalHistory: user.medicalHistory || "",
         doctorId: selectedDoctor._id,
-        doctorName: `Dr. ${selectedDoctor.name}`,
+        doctorName: formatDoctorDisplayName(selectedDoctor.name),
         specialization: selectedDoctor.specialization || "",
         location: selectedDoctor.location || "",
         date: dateStr,
@@ -861,6 +897,7 @@ const PatientDashboard = () => {
                   onChange={(e) => setFilterSpec(e.target.value)}
                   className="w-full h-10 pl-9 pr-8 text-sm text-slate-900 rounded-xl border-2 border-slate-200 bg-white focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-all duration-200 appearance-none cursor-pointer"
                 >
+                  <option value="">None</option>
                   <option value="*">All Specializations</option>
                   {specializations.map((spec) => (
                     <option key={spec} value={spec}>{spec}</option>
@@ -902,72 +939,70 @@ const PatientDashboard = () => {
 
           {/* Doctors — Card View */}
           {viewMode === "card" && (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">{/* Multi-column doctor cards matching guest page */}
+            <>
               {loadingDoctors ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
-                    <div className="flex items-center gap-4">
-                      <div className="h-16 w-16 rounded-2xl bg-slate-200 flex-shrink-0" />
-                      <div className="space-y-2 flex-1">
-                        <div className="h-4 bg-slate-200 rounded-lg w-1/3" />
-                        <div className="h-3 bg-slate-200 rounded-lg w-1/4" />
+                <div className="grid md:grid-cols-2 2xl:grid-cols-3 gap-6">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+                      <div className="flex items-center gap-4">
+                        <div className="h-16 w-16 rounded-2xl bg-slate-200 flex-shrink-0" />
+                        <div className="space-y-2 flex-1">
+                          <div className="h-4 bg-slate-200 rounded-lg w-1/3" />
+                          <div className="h-3 bg-slate-200 rounded-lg w-1/4" />
+                        </div>
                       </div>
+                      <div className="space-y-2">
+                        <div className="h-3 bg-slate-200 rounded-lg w-2/3" />
+                        <div className="h-3 bg-slate-200 rounded-lg w-1/2" />
+                      </div>
+                      <div className="h-9 bg-slate-200 rounded-xl" />
                     </div>
-                    <div className="space-y-2">
-                      <div className="h-3 bg-slate-200 rounded-lg w-2/3" />
-                      <div className="h-3 bg-slate-200 rounded-lg w-1/2" />
-                    </div>
-                    <div className="h-9 bg-slate-200 rounded-xl" />
-                  </div>
-                ))
+                  ))}
+                </div>
               ) : selectedSymptoms.length === 0 && !filterName.trim() && !filterSpec && !filterLocation.trim() ? (
-                <div className="col-span-full">
-                  <div className="flex flex-col items-center justify-center py-16 px-6 rounded-2xl bg-gradient-to-br from-slate-50 via-white to-sky-50/30 border-2 border-dashed border-slate-200">
-                    <div className="relative mb-6">
-                      <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-sky-500 via-sky-600 to-blue-600 flex items-center justify-center shadow-xl shadow-sky-300/50">
-                        <Stethoscope className="h-12 w-12 text-white" />
-                      </div>
-                      <div className="absolute -top-2 -right-2 h-9 w-9 rounded-full bg-white border-2 border-sky-200 flex items-center justify-center shadow-md">
-                        <Search className="h-5 w-5 text-sky-600" />
-                      </div>
+                <div className="flex flex-col items-center justify-center py-16 px-6 rounded-2xl bg-gradient-to-br from-slate-50 via-white to-sky-50/30 border-2 border-dashed border-slate-200">
+                  <div className="relative mb-6">
+                    <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-sky-500 via-sky-600 to-blue-600 flex items-center justify-center shadow-xl shadow-sky-300/50">
+                      <Stethoscope className="h-12 w-12 text-white" />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900 mb-2">Find Your Perfect Doctor</h3>
-                    <p className="text-sm text-slate-600 text-center max-w-md mb-8 leading-relaxed">
-                      Select a symptom below or use the search filters above to discover qualified doctors available for consultation.
-                    </p>
-                    <div className="px-4 py-2 -mx-4">
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        {SYMPTOM_CARDS.slice(0, 5).map((s) => (
-                          <button
-                            key={s.name}
-                            onClick={() => handleSymptomClick(s.name)}
-                            className="flex flex-col items-center justify-center p-4 rounded-lg border-2 border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:border-sky-400 hover:text-sky-600 hover:bg-sky-50 hover:scale-105 hover:shadow-lg transition-all duration-200"
-                          >
-                            <span className="text-3xl mb-2">{s.icon}</span>
-                            <span className="text-xs text-center leading-tight">{s.name}</span>
-                          </button>
-                        ))}
-                      </div>
+                    <div className="absolute -top-2 -right-2 h-9 w-9 rounded-full bg-white border-2 border-sky-200 flex items-center justify-center shadow-md">
+                      <Search className="h-5 w-5 text-sky-600" />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-2">Find Your Perfect Doctor</h3>
+                  <p className="text-sm text-slate-600 text-center max-w-md mb-8 leading-relaxed">
+                    Select a symptom below or use the search filters above to discover qualified doctors available for consultation.
+                  </p>
+                  <div className="px-4 py-2 -mx-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      {SYMPTOM_CARDS.slice(0, 5).map((s) => (
+                        <button
+                          key={s.name}
+                          onClick={() => handleSymptomClick(s.name)}
+                          className="flex flex-col items-center justify-center p-4 rounded-lg border-2 border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:border-sky-400 hover:text-sky-600 hover:bg-sky-50 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                        >
+                          <span className="text-3xl mb-2">{s.icon}</span>
+                          <span className="text-xs text-center leading-tight">{s.name}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
               ) : filteredDoctors.length === 0 ? (
-                <div className="col-span-full">
-                  <div className="flex flex-col items-center justify-center py-16 px-6 rounded-2xl bg-gradient-to-br from-slate-50 to-white border-2 border-dashed border-slate-200">
-                    <div className="h-20 w-20 rounded-2xl bg-slate-100 flex items-center justify-center mb-5 shadow-sm">
-                      <Search className="h-9 w-9 text-slate-400" />
-                    </div>
-                    <h3 className="font-bold text-slate-900 mb-2 text-lg">No Doctors Found</h3>
-                    <p className="text-sm text-slate-600 text-center mb-6 max-w-sm leading-relaxed">
-                      We couldn't find any doctors matching your criteria. Try adjusting your filters or selecting different symptoms.
-                    </p>
-                    <Button variant="outline" size="sm" onClick={clearFilters} className="rounded-xl border-sky-300 text-sky-600 hover:bg-sky-50 font-semibold">
-                      <X className="h-3.5 w-3.5 mr-1.5" /> Clear All Filters
-                    </Button>
+                <div className="flex flex-col items-center justify-center py-16 px-6 rounded-2xl bg-gradient-to-br from-slate-50 to-white border-2 border-dashed border-slate-200">
+                  <div className="h-20 w-20 rounded-2xl bg-slate-100 flex items-center justify-center mb-5 shadow-sm">
+                    <Search className="h-9 w-9 text-slate-400" />
                   </div>
+                  <h3 className="font-bold text-slate-900 mb-2 text-lg">No Doctors Found</h3>
+                  <p className="text-sm text-slate-600 text-center mb-6 max-w-sm leading-relaxed">
+                    We couldn't find any doctors matching your criteria. Try adjusting your filters or selecting different symptoms.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={clearFilters} className="rounded-xl border-sky-300 text-sky-600 hover:bg-sky-50 font-semibold">
+                    <X className="h-3.5 w-3.5 mr-1.5" /> Clear All Filters
+                  </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div className="grid md:grid-cols-2 2xl:grid-cols-3 gap-6">
                   {filteredDoctors.map((doc) => (
                     <DoctorCard
                       key={doc._id}
@@ -977,7 +1012,7 @@ const PatientDashboard = () => {
                   ))}
                 </div>
               )}
-            </div>
+            </>
           )}
 
           {/* Doctors — Table View */}
@@ -1006,7 +1041,7 @@ const PatientDashboard = () => {
                   ) : (
                     filteredDoctors.map((doc) => (
                       <TableRow key={doc._id} className="hover:bg-slate-100/60 transition-all duration-200">
-                        <TableCell className="font-semibold text-slate-900">Dr. {doc.name}</TableCell>
+                        <TableCell className="font-semibold text-slate-900">{formatDoctorDisplayName(doc.name)}</TableCell>
                         <TableCell>
                           <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-100">{doc.specialization}</span>
                         </TableCell>
@@ -1169,7 +1204,7 @@ const PatientDashboard = () => {
                   <span className="text-white font-bold text-lg">{(selectedDoctor.name || "?").slice(0, 2).toUpperCase()}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-slate-900">Dr. {selectedDoctor.name}</h3>
+                  <h3 className="font-bold text-slate-900">{formatDoctorDisplayName(selectedDoctor.name)}</h3>
                   <p className="text-sm text-slate-600">{selectedDoctor.specialization}</p>
                   <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                     <span className="inline-flex items-center gap-1 text-xs text-slate-600"><MapPin className="h-3 w-3" />{formatLocation(selectedDoctor.location)}</span>
