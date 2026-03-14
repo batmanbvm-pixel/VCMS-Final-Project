@@ -28,6 +28,34 @@ interface SymptomOption {
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+const normalizeSpecialization = (value: string) =>
+  String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z\s]/g, "")
+    .replace(/\s+/g, " ");
+
+const canonicalSpecialization = (value: string) => {
+  const normalized = normalizeSpecialization(value);
+
+  if (normalized.includes("cardio")) return "cardio";
+  if (normalized.includes("neuro")) return "neuro";
+  if (normalized.includes("ortho")) return "ortho";
+  if (normalized.includes("pedia")) return "pedia";
+  if (normalized.includes("derma")) return "derma";
+  if (normalized.includes("gastro")) return "gastro";
+  if (normalized.includes("ophthal") || normalized.includes("eye")) return "ophthal";
+  if (normalized.includes("psych")) return "psych";
+  if (normalized.includes("ent") || normalized.includes("ear") || normalized.includes("nose") || normalized.includes("throat")) return "ent";
+  if (normalized.includes("uro")) return "uro";
+  if (normalized.includes("general")) return "general";
+
+  return normalized;
+};
+
+const cleanDoctorName = (name: string) =>
+  String(name || "Doctor").replace(/^dr\.?\s*/i, "").trim() || "Doctor";
+
 const SPECIALIZATIONS = [
   { label: "🏥 General Medicine", value: "General Medicine", icon: Stethoscope },
   { label: "❤️ Cardiology", value: "Cardiology", icon: Heart },
@@ -78,6 +106,34 @@ const Chatbot = () => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [isBooking, setIsBooking] = useState(false);
 
+  const matchesSpecialization = (doctorSpec: string, selectedSpecValue: string) => {
+    const doctorNorm = normalizeSpecialization(doctorSpec);
+    const selectedNorm = normalizeSpecialization(selectedSpecValue);
+    if (!doctorNorm || !selectedNorm) return false;
+
+    const doctorCanonical = canonicalSpecialization(doctorNorm);
+    const selectedCanonical = canonicalSpecialization(selectedNorm);
+
+    if (doctorCanonical && selectedCanonical && doctorCanonical === selectedCanonical) {
+      return true;
+    }
+
+    if (doctorNorm === selectedNorm) return true;
+
+    // Handle common phrasing variations from backend data.
+    return (
+      doctorNorm.includes(selectedNorm) ||
+      selectedNorm.includes(doctorNorm)
+    );
+  };
+
+  const isBookableDoctor = (doctor: any) => {
+    const status = String(doctor?.approvalStatus || "").toLowerCase();
+    const isApproved = status ? status === "approved" : true;
+    const isActive = doctor?.isActive !== false;
+    return isApproved && isActive;
+  };
+
   const normalizeSymptomKey = (value: string) =>
     value
       .toLowerCase()
@@ -114,12 +170,19 @@ const Chatbot = () => {
     const fetchDoctors = async () => {
       try {
         const [doctorRes, symptomRes] = await Promise.all([
-          api.get('/public/doctors', { params: { limit: 500 } }),
+          // Use authenticated list for booking flow (public endpoint only returns online doctors).
+          api.get('/users/doctors', { params: { limit: 1000 } }).catch(() => api.get('/public/doctors', { params: { limit: 1000 } })),
           api.get('/public/symptoms', { params: { limit: 300 } }),
         ]);
 
-        if (doctorRes.data?.doctors) {
-          setDoctors(doctorRes.data.doctors);
+        const doctorList = Array.isArray(doctorRes.data?.doctors)
+          ? doctorRes.data.doctors
+          : Array.isArray(doctorRes.data?.data)
+            ? doctorRes.data.data
+            : [];
+
+        if (doctorList.length > 0) {
+          setDoctors(doctorList.filter(isBookableDoctor));
         }
 
         const apiSymptoms = Array.isArray(symptomRes.data?.symptoms)
@@ -199,6 +262,24 @@ const Chatbot = () => {
     return slots;
   };
 
+  const getAvailableTimeSlotsForDate = (doctor: any, date: Date): string[] => {
+    if (!doctor || !date) return [];
+
+    const dayName = DAYS[date.getDay()];
+    const dayAvail = doctor.availability?.find((av: any) => av.day === dayName);
+    if (!dayAvail) return [];
+
+    let timeSlots: string[] = [];
+    if (dayAvail.slots && Array.isArray(dayAvail.slots)) {
+      timeSlots = dayAvail.slots;
+    } else if (dayAvail.startTime && dayAvail.endTime) {
+      timeSlots = generateTimeSlots(dayAvail.startTime, dayAvail.endTime);
+    }
+
+    const dateStr = format(date, "yyyy-MM-dd");
+    return timeSlots.filter((slot) => !isSlotBooked(doctor._id, dateStr, slot));
+  };
+
   const handleButtonClick = async (value: string, label: string, msgIdx: number) => {
     switch (step) {
       case "bookingMode": {
@@ -275,7 +356,9 @@ const Chatbot = () => {
         setUsedMsgIdx(prev => new Set(prev).add(msgIdx));
         addMessage("user", label);
         setSelectedSpec(value);
-        const matched = doctors.filter(d => d.specialization === value && d.approvalStatus === 'approved');
+        const matched = doctors.filter(
+          (d) => isBookableDoctor(d) && matchesSpecialization(d.specialization, value)
+        );
         setFilteredDoctors(matched);
         
         if (matched.length === 0) {
@@ -286,7 +369,7 @@ const Chatbot = () => {
           addMessage("bot", "No doctors available for this specialization. Try another?", specButtons);
         } else {
           const doctorButtons = matched.slice(0, 15).map(d => ({
-            label: `Dr. ${d.name} - ₹${d.consultationFee || 500}`,
+            label: `Dr. ${cleanDoctorName(d.name)} - ₹${d.consultationFee || 500}`,
             value: d._id
           }));
           addMessage("bot", `Found ${matched.length} doctor(s). Select one:`, doctorButtons);
@@ -302,7 +385,8 @@ const Chatbot = () => {
         if (doctor) {
           setSelectedDoctor(doctor);
           const locationText = typeof doctor.location === 'string' ? doctor.location : (doctor.location?.city || 'Available online');
-          addMessage("bot", `Great! You selected Dr. ${doctor.name} (${doctor.specialization}). \n\nFee: ₹${doctor.consultationFee || 500}\nLocation: ${locationText}`);
+          const doctorDisplayName = cleanDoctorName(doctor.name);
+          addMessage("bot", `Great! You selected Dr. ${doctorDisplayName} (${doctor.specialization}). \n\nFee: ₹${doctor.consultationFee || 500}\nLocation: ${locationText}`);
           addMessage("bot", "Now, please select a date:", [], "calendar");
           setStep("date");
         }
@@ -310,9 +394,7 @@ const Chatbot = () => {
       }
 
       case "time": {
-        setUsedMsgIdx(prev => new Set(prev).add(msgIdx));
         addMessage("user", label);
-        setSelectedTime(value);
         if (!selectedDoctor || !selectedDate) return;
 
         const dateStr = format(selectedDate, "yyyy-MM-dd");
@@ -324,12 +406,30 @@ const Chatbot = () => {
             description: "This time is already booked. Please choose another slot.",
             variant: "destructive",
           });
+
+          const remainingSlots = getAvailableTimeSlotsForDate(selectedDoctor, selectedDate);
+          if (remainingSlots.length === 0) {
+            addMessage("bot", "That slot was just booked, and no other slots are left for this day. Please choose another date.", [], "calendar");
+            setStep("date");
+            return;
+          }
+
+          const refreshedButtons = remainingSlots.map((slot) => ({
+            label: slot,
+            value: slot,
+          }));
+
+          addMessage("bot", "That slot was just booked. Please pick another available time:", refreshedButtons);
+          setStep("time");
           return;
         }
 
+        setUsedMsgIdx(prev => new Set(prev).add(msgIdx));
+        setSelectedTime(value);
+
         addMessage("bot", 
           `📋 *Booking Summary*\n\n` +
-          `👨‍⚕️ Doctor: Dr. ${selectedDoctor.name}\n` +
+          `👨‍⚕️ Doctor: Dr. ${cleanDoctorName(selectedDoctor.name)}\n` +
           `🏥 Specialization: ${selectedDoctor.specialization}\n` +
           `📅 Date: ${format(selectedDate, "PPP")}\n` +
           `⏰ Time: ${value}\n` +
@@ -360,7 +460,7 @@ const Chatbot = () => {
               patientAge: user.age || 25,
               patientMedicalHistory: user.medicalHistory || "",
               doctorId: selectedDoctor._id,
-              doctorName: `Dr. ${selectedDoctor.name}`,
+              doctorName: `Dr. ${cleanDoctorName(selectedDoctor.name)}`,
               specialization: selectedDoctor.specialization || "",
               location: selectedDoctor.location || "",
               date: dateStr,
@@ -417,23 +517,16 @@ const Chatbot = () => {
     setSelectedDate(date);
     addMessage("user", format(date, "PPP"));
 
-    const dayName = DAYS[date.getDay()];
-    const dayAvail = selectedDoctor.availability?.find((av: any) => av.day === dayName);
-
-    if (!dayAvail) {
+    const hasDayAvailability = selectedDoctor.availability?.some((av: any) => av.day === DAYS[date.getDay()]);
+    if (!hasDayAvailability) {
       addMessage("bot", "Doctor is not available on this day. Please select another date.", [], "calendar");
       return;
     }
 
-    let timeSlots: string[] = [];
-    if (dayAvail.slots && Array.isArray(dayAvail.slots)) {
-      timeSlots = dayAvail.slots;
-    } else if (dayAvail.startTime && dayAvail.endTime) {
-      timeSlots = generateTimeSlots(dayAvail.startTime, dayAvail.endTime);
-    }
+    const timeSlots = getAvailableTimeSlotsForDate(selectedDoctor, date);
 
     if (timeSlots.length === 0) {
-      addMessage("bot", "No time slots available for this day. Please select another date.", [], "calendar");
+      addMessage("bot", "No available time slots for this day (all may be booked). Please select another date.", [], "calendar");
       return;
     }
 

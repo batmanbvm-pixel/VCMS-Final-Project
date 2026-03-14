@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClinic } from "@/contexts/ClinicContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Clock, Video, CheckCircle, XCircle, AlertTriangle, CalendarDays, RefreshCw, User, FileText, FilePen } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { EmptyState } from "@/components/EmptyState";
 import { PatientMedicalHistoryButton } from "@/components/PatientMedicalHistoryButton";
@@ -24,10 +24,17 @@ const DoctorTodayAppointments = () => {
   const { user } = useAuth();
   const { appointments, acceptAppointment, rejectAppointment, updateAppointmentStatus, getPrescriptionByAppointment, fetchAppointments, fetchPrescriptions } = useClinic();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   const [activeFilter, setActiveFilter] = useState<'today' | 'upcoming' | 'completed' | 'all'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Ensure latest statuses are loaded when arriving from video call completion/end.
+  useEffect(() => {
+    fetchAppointments();
+    fetchPrescriptions();
+  }, [fetchAppointments, fetchPrescriptions, location.state]);
 
   const today = new Date().toISOString().split("T")[0];
   const normalizeStatus = (status?: string) => String(status || "").toLowerCase();

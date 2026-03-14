@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useClinic } from "@/contexts/ClinicContext";
 import useSocket from "@/hooks/useSocket";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -117,6 +118,7 @@ const formatAppointmentDate = (rawDate: unknown): string => {
 const VideoConsultation = () => {
   const { appointmentId } = useParams<{ appointmentId: string }>();
   const { user } = useAuth();
+  const { fetchAppointments, fetchPrescriptions } = useClinic();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { on, off, emit, joinRoom } = useSocket();
@@ -133,9 +135,12 @@ const VideoConsultation = () => {
   const [prescriptionExpanded, setPrescriptionExpanded] = useState(false);
   const [pollingActive, setPollingActive] = useState(true);
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
+  const [endCallConfirmOpen, setEndCallConfirmOpen] = useState(false);
   const [completingConsultation, setCompletingConsultation] = useState(false);
   const [consultationCompleted, setConsultationCompleted] = useState(false);
   const [mediaPermissionDenied, setMediaPermissionDenied] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [hasRemoteMedia, setHasRemoteMedia] = useState(false);
   const [remoteWaitingInfo, setRemoteWaitingInfo] = useState<{ waiting: boolean; role: "doctor" | "patient" | "unknown" }>({ waiting: true, role: "unknown" });
   const [rxForm, setRxForm] = useState<PrescriptionFormData>({
     diagnosis: "",
@@ -171,6 +176,8 @@ const VideoConsultation = () => {
   const callActiveRef = useRef<boolean>(false);
   const initializingCallRef = useRef<boolean>(false);
   const patientAutoJoinTriggeredRef = useRef<boolean>(false);
+  const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   // Track whether the doctor is present in the room (for patient waiting room UI)
   const [doctorPresent, setDoctorPresent] = useState(false);
@@ -192,6 +199,47 @@ const VideoConsultation = () => {
       waiting,
       role: isDoctor ? "doctor" : "patient",
     });
+  };
+
+  const flushPendingIceCandidates = async () => {
+    const pc = peerConnectionRef.current;
+    if (!pc || !pc.remoteDescription) return;
+
+    if (pendingIceCandidatesRef.current.length === 0) return;
+
+    const queued = [...pendingIceCandidatesRef.current];
+    pendingIceCandidatesRef.current = [];
+
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch {
+        // Ignore invalid/late candidates
+      }
+    }
+  };
+
+  const applyIncomingOffer = async (offer: RTCSessionDescriptionInit) => {
+    const pc = peerConnectionRef.current;
+    if (!pc) {
+      pendingOfferRef.current = offer;
+      return;
+    }
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      await flushPendingIceCandidates();
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      const doctorMongoId = getDoctorMongoId();
+      if (doctorMongoId) {
+        emit("video:answer", { answer, to: doctorMongoId, appointmentId });
+      }
+    } catch {
+      // Handle connection error silently
+    }
   };
 
   // Complete consultation function
@@ -218,9 +266,12 @@ const VideoConsultation = () => {
         title: "Consultation Completed", 
         description: "The appointment has been marked as completed." 
       });
+
+      // Keep dashboard data fresh before redirect
+      await Promise.allSettled([fetchAppointments(), fetchPrescriptions()]);
       
       // End the call
-      endCall();
+      performEndCall();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -352,6 +403,7 @@ const VideoConsultation = () => {
     const remoteStream = remoteStreamRef.current;
     if (remoteVideoRef.current && remoteStream && remoteStream.getTracks().length > 0) {
       remoteVideoRef.current.srcObject = remoteStream;
+      setHasRemoteMedia(true);
       remoteVideoRef.current.play().catch(() => {
         // Autoplay may be blocked until user gesture in some browsers.
       });
@@ -363,21 +415,7 @@ const VideoConsultation = () => {
     if (!appointmentId || !user) return;
 
     const handleOffer = async ({ offer }: { offer: RTCSessionDescriptionInit; from: string }) => {
-      const pc = peerConnectionRef.current;
-      if (!pc) return;
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        // Always reply to the doctor's MongoDB _id (not socket.id),
-        // because emitToUser on the server keys by MongoDB userId.
-        const doctorMongoId = getDoctorMongoId();
-        if (doctorMongoId) {
-          emit("video:answer", { answer, to: doctorMongoId, appointmentId });
-        }
-      } catch (e) {
-        // Handle connection error silently
-      }
+      await applyIncomingOffer(offer);
     };
 
     const handleAnswer = async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
@@ -385,6 +423,7 @@ const VideoConsultation = () => {
       if (!pc) return;
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        await flushPendingIceCandidates();
       } catch (e) {
         // Handle connection error silently
       }
@@ -392,7 +431,18 @@ const VideoConsultation = () => {
 
     const handleIceCandidate = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
       const pc = peerConnectionRef.current;
-      if (!pc || !candidate) return;
+      if (!candidate) return;
+
+      if (!pc) {
+        pendingIceCandidatesRef.current.push(candidate);
+        return;
+      }
+
+      if (!pc.remoteDescription) {
+        pendingIceCandidatesRef.current.push(candidate);
+        return;
+      }
+
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (e) {
@@ -700,6 +750,13 @@ const VideoConsultation = () => {
 
       peerConnectionRef.current = peerConnection;
 
+      // If signaling arrived before peer connection was ready, apply it now.
+      if (pendingOfferRef.current) {
+        const queuedOffer = pendingOfferRef.current;
+        pendingOfferRef.current = null;
+        await applyIncomingOffer(queuedOffer);
+      }
+
       // Add local stream tracks
       stream.getTracks().forEach((track) => {
         peerConnection.addTrack(track, stream);
@@ -707,13 +764,28 @@ const VideoConsultation = () => {
 
       // Handle remote stream
       peerConnection.ontrack = (event) => {
-        remoteStreamRef.current.addTrack(event.track);
+        const existing = remoteStreamRef.current
+          .getTracks()
+          .some((t) => t.id === event.track.id);
+
+        if (!existing) {
+          remoteStreamRef.current.addTrack(event.track);
+        }
+
+        event.track.onended = () => {
+          const activeTracks = remoteStreamRef.current.getTracks().filter((t) => t.readyState === "live");
+          if (activeTracks.length === 0) {
+            setHasRemoteMedia(false);
+          }
+        };
+
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = remoteStreamRef.current;
           remoteVideoRef.current.play().catch(() => {
             // Autoplay might be blocked; user gesture can start playback.
           });
         }
+        setHasRemoteMedia(true);
         setConnected(true);
       };
 
@@ -741,6 +813,7 @@ const VideoConsultation = () => {
           emitWaitingStatus(false);
         } else if (peerConnection.connectionState === "closed") {
           setConnected(false);
+          setHasRemoteMedia(false);
           setRemoteWaitingInfo((prev) => ({ ...prev, waiting: false }));
           emitWaitingStatus(false);
         } else if (
@@ -748,6 +821,7 @@ const VideoConsultation = () => {
           peerConnection.connectionState === "failed"
         ) {
           setConnected(false);
+          setHasRemoteMedia(false);
           setRemoteWaitingInfo((prev) => ({ ...prev, waiting: true }));
           emitWaitingStatus(true);
         }
@@ -781,6 +855,19 @@ const VideoConsultation = () => {
       });
     } finally {
       initializingCallRef.current = false;
+    }
+  };
+
+  const retryVideoConnection = async () => {
+    if (reconnecting || initializingCallRef.current) return;
+
+    try {
+      setReconnecting(true);
+      cleanupCall();
+      await initializeCall();
+      toast({ title: "Reconnecting...", description: "Trying to refresh video connection." });
+    } finally {
+      setReconnecting(false);
     }
   };
 
@@ -911,7 +998,7 @@ const VideoConsultation = () => {
     setCameraOff(!shouldEnable);
   };
 
-  const endCall = async () => {
+  const performEndCall = async () => {
     const appt = appointmentRef.current;
     const targetId = isDoctor ? getEntityId(appt?.patientId) : getEntityId(appt?.doctorId);
     if (targetId) {
@@ -932,7 +1019,7 @@ const VideoConsultation = () => {
 
     // Navigate back to respective dashboard
     if (isDoctor) {
-      navigate("/doctor/today", { replace: true });
+      navigate("/doctor/today", { replace: true, state: { refreshAt: Date.now() } });
       return;
     }
 
@@ -942,6 +1029,10 @@ const VideoConsultation = () => {
     }
 
     navigate("/", { replace: true });
+  };
+
+  const endCall = () => {
+    setEndCallConfirmOpen(true);
   };
 
   const cleanupCall = () => {
@@ -971,6 +1062,7 @@ const VideoConsultation = () => {
     setCallActive(false);
     callActiveRef.current = false;
     setConnected(false);
+    setHasRemoteMedia(false);
   };
 
   if (loading) {
@@ -1113,15 +1205,15 @@ const VideoConsultation = () => {
 
           {/* Remote Video */}
           <Card className="bg-white border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-            <div className="aspect-video bg-sky-100 flex items-center justify-center relative">
+            <div className="aspect-video bg-gradient-to-br from-sky-50 to-cyan-50 flex items-center justify-center relative border border-sky-200">
               <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
                 muted={false}
-                className={`w-full h-full object-cover ${connected ? "" : "hidden"}`}
+                className={`w-full h-full object-cover rounded-xl ${hasRemoteMedia ? "" : "hidden"}`}
               />
-              {!connected && (
+              {!hasRemoteMedia && (
                 <div className="flex flex-col items-center justify-center space-y-3 text-slate-600">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sky-50 text-sky-600">
                     <Video className="h-8 w-8" />
@@ -1147,6 +1239,18 @@ const VideoConsultation = () => {
                     </p>
                   </div>
                   <Loader className="h-4 w-4 animate-spin" />
+                  {callActive && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-sky-200 hover:bg-sky-50 hover:border-sky-500"
+                      onClick={retryVideoConnection}
+                      disabled={reconnecting}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${reconnecting ? "animate-spin" : ""}`} />
+                      {reconnecting ? "Refreshing..." : "Refresh Video"}
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -1169,7 +1273,7 @@ const VideoConsultation = () => {
                 className={`h-12 w-12 rounded-full transition-all duration-200 shadow-lg hover:scale-105 ${
                   !muted 
                     ? 'bg-sky-500 hover:bg-sky-600 border-sky-600 text-white' 
-                    : 'border-white'
+                    : 'text-white'
                 }`}
                 onClick={toggleMute}
                 title={muted ? "Unmute microphone" : "Mute microphone"}
@@ -1183,14 +1287,18 @@ const VideoConsultation = () => {
             {/* Camera */}
             <div className="flex flex-col items-center gap-1">
               <Button
-                variant={cameraOff ? "destructive" : "outline"}
+                variant={cameraOff ? "destructive" : "default"}
                 size="icon"
-                className={`h-12 w-12 rounded-full bg-white border-slate-200 transition-all duration-200 hover:scale-105 ${!cameraOff ? 'hover:bg-sky-50 hover:border-sky-500' : ''}`}
+                className={`h-12 w-12 rounded-full transition-all duration-200 shadow-lg hover:scale-105 ${
+                  !cameraOff
+                    ? 'bg-sky-500 hover:bg-sky-600 border-sky-600 text-white'
+                    : 'text-white'
+                }`}
                 onClick={toggleCamera}
                 title={cameraOff ? "Turn camera on" : "Turn camera off"}
                 aria-label={cameraOff ? "Turn camera on" : "Turn camera off"}
               >
-                {cameraOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5 text-slate-700" />}
+                {cameraOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
               </Button>
               <span className="text-[10px] text-slate-600">{cameraOff ? "Camera Off" : "Camera On"}</span>
             </div>
@@ -1575,6 +1683,35 @@ const VideoConsultation = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Prescription Modal */}
+      <Dialog open={endCallConfirmOpen} onOpenChange={setEndCallConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isDoctor ? "End this consultation?" : "Leave this consultation?"}</DialogTitle>
+            <DialogDescription>
+              You can continue the call, or go back to your dashboard now.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setEndCallConfirmOpen(false)}
+            >
+              Continue Call
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setEndCallConfirmOpen(false);
+                performEndCall();
+              }}
+            >
+              Go to Dashboard
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Prescription Modal */}
       <Dialog open={prescriptionModalOpen} onOpenChange={setPrescriptionModalOpen}>
