@@ -8,11 +8,14 @@ const path = require('path');
 const fs = require('fs');
 
 const GEMINI_FALLBACK_MODELS = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash-latest',
   'gemini-1.5-flash',
-  'gemini-1.5-flash-8b',
   'gemini-1.5-pro',
-  'gemini-pro',
 ];
+
+let geminiKeyCursor = 0;
 
 const getGeminiApiKeys = () => {
   const keys = [];
@@ -30,9 +33,17 @@ const getGeminiApiKeys = () => {
 
   return keys;
 };
-
-const getGeminiApiKey = () => getGeminiApiKeys()[0] || '';
 const hasGeminiKey = () => getGeminiApiKeys().length > 0;
+
+const getGeminiApiKeysInRotation = () => {
+  const keys = getGeminiApiKeys();
+  if (keys.length <= 1) return keys;
+
+  const start = geminiKeyCursor % keys.length;
+  geminiKeyCursor = (geminiKeyCursor + 1) % keys.length;
+
+  return [...keys.slice(start), ...keys.slice(0, start)];
+};
 
 const cleanAiText = (value = '') => {
   let text = String(value || '')
@@ -220,71 +231,118 @@ const discoverGeminiModels = async (apiKey) => {
 };
 
 const generateJsonWithGemini = async (prompt) => {
-  const apiKeys = getGeminiApiKeys();
+  const apiKeys = getGeminiApiKeysInRotation();
   if (apiKeys.length === 0) {
     throw new Error('Gemini API key missing');
   }
 
   const errors = [];
+  const exhaustedKeys = new Set();
 
-  for (const apiKey of apiKeys) {
+  keyLoop: for (const apiKey of apiKeys) {
+    const keySnip = apiKey.slice(0, 15) + '...';
+
+    // Skip keys already marked as exhausted/invalid in this request.
+    if (exhaustedKeys.has(apiKey)) {
+      console.warn(`[Gemini] ⏭️  Skipping already-exhausted key: ${keySnip}`);
+      continue keyLoop;
+    }
+
     let models = GEMINI_FALLBACK_MODELS;
     try {
       models = await discoverGeminiModels(apiKey);
     } catch (err) {
-      errors.push(`Model discovery failed for key: ${err.message}`);
+      errors.push(`Model discovery failed for key ${keySnip}: ${err.message}`);
+      // If discovery itself fails (bad key, no network), skip this key.
+      exhaustedKeys.add(apiKey);
+      continue keyLoop;
     }
 
     for (const model of models) {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const configs = [
-        { temperature: 0.3, maxOutputTokens: 1600, responseMimeType: 'application/json' },
-        { temperature: 0.3, maxOutputTokens: 1600 },
+        { temperature: 0.3, maxOutputTokens: 8192, responseMimeType: 'application/json' },
+        { temperature: 0.3, maxOutputTokens: 8192 },
+        { temperature: 0.3, maxOutputTokens: 4096 },
       ];
 
       for (const generationConfig of configs) {
-        const resp = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig,
-          }),
-        });
+        let resp;
+        try {
+          resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig,
+            }),
+          });
+        } catch (networkErr) {
+          errors.push(`[${model}] Network error: ${networkErr.message}`);
+          console.error(`[Gemini] 🌐 Network error with key ${keySnip} / model ${model}: ${networkErr.message}`);
+          exhaustedKeys.add(apiKey);
+          continue keyLoop;
+        }
 
         if (resp.ok) {
           const data = await resp.json();
           const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+          console.log(`[Gemini] ✅ Success with key ${keySnip} / model ${model}`);
           return parseJsonFromText(text);
         }
 
         const errText = await resp.text();
-        errors.push(`[${model}] ${resp.status} ${errText.slice(0, 240)}`);
+        const errSnip = errText.slice(0, 400);
+        errors.push(`[${model}] ${resp.status} ${errSnip}`);
+        console.error(`[Gemini] ❌ key=${keySnip} model=${model} → HTTP ${resp.status}: ${errSnip}`);
 
-        // Invalid model/method/mime can try next model or next config.
-        const isRecoverableModelIssue = resp.status === 404 || resp.status === 400;
-        const isQuotaIssue = resp.status === 429;
-        const isServiceUnavailable = resp.status === 503;
+        const isQuotaIssue       = resp.status === 429;
+        const isRevokedKey        = resp.status === 403;
+        const isInvalidKey        = resp.status === 400 && /api.?key|invalid.?key|bad.?key/i.test(errText);
+        const isServiceUnavail    = resp.status === 503;
+        const isInvalidModel      = resp.status === 404;
+        const isBadMimeType       = resp.status === 400 && /response_mime_type|unsupported/i.test(errText);
+        const isTokenLimit        = resp.status === 400 && /user location|token|context length|too long/i.test(errText);
+
+        if (isRevokedKey || isInvalidKey) {
+          // Key is revoked, leaked, or invalid — mark & immediately try next key.
+          console.error(`[Gemini] 🔑 Key invalid/revoked (${resp.status}): ${keySnip} — switching to next key`);
+          exhaustedKeys.add(apiKey);
+          continue keyLoop;
+        }
 
         if (isQuotaIssue) {
-          // Try next key quickly when quota is exhausted.
+          // Quota exhausted for this key — immediately switch to next key.
+          console.warn(`[Gemini] ⚠️  Quota limit hit for key ${keySnip} — switching to next key`);
+          exhaustedKeys.add(apiKey);
+          continue keyLoop;
+        }
+
+        if (isServiceUnavail) {
+          // Model overloaded — try next model (same key).
           break;
         }
 
-        if (isServiceUnavailable) {
-          // Model overloaded: try next model quickly.
-          break;
-        }
-
-        if (!isRecoverableModelIssue) {
-          // Server-side/transient issue; continue trying others.
+        if (isBadMimeType) {
+          // Unsupported MIME type for this config — try next config.
           continue;
         }
+
+        if (isInvalidModel || isTokenLimit) {
+          // Model not found or prompt too large — skip this model.
+          break;
+        }
+
+        // Other 4xx/5xx — try next config.
+        continue;
       }
     }
+
+    // All models exhausted for this key without success.
+    console.warn(`[Gemini] ⚠️  All models exhausted for key ${keySnip} — trying next key`);
   }
 
-  throw new Error(`Gemini request failed across all key/model attempts: ${errors.join(' | ')}`);
+  throw new Error(`Gemini request failed across all keys/models. Keys tried: ${apiKeys.length}, exhausted: ${exhaustedKeys.size}. Details: ${errors.join(' | ')}`);
 };
 
 const isEnglishOnlyText = (text = '') => {
@@ -1033,8 +1091,12 @@ const upload = multer({
  * Summarize a prescription using Gemini
  */
 router.post('/summarize', protect, async (req, res) => {
+  let type;
+  let content;
+  let language = 'english';
+  let detailedMode = false;
   try {
-    let { type, content, language, detailedMode = false } = req.body;
+    ({ type, content, language, detailedMode = false } = req.body || {});
 
     // Normalize language parameter: ensure it's lowercase and valid
     language = language ? String(language).toLowerCase().trim() : 'english';
@@ -1047,13 +1109,22 @@ router.post('/summarize', protect, async (req, res) => {
     }
 
     if (!hasGeminiKey()) {
-      // For prescriptions, use the prescription-specific fallback with language support
+      // No key configured — silently use rule-based fallback
+      console.warn('[Gemini] No key — using rule-based summarize fallback');
       const fallback = type === 'prescription'
         ? ruleBasedPrescriptionSummary(content, language)
         : ruleBasedAnalysis(content, language);
-      // Ensure aiPowered flag and language are set
-      const response = { ...fallback, aiPowered: false, language: language };
-      return res.json(response);
+      return res.json({
+        summary: fallback.summary || '',
+        keyPoints: fallback.keyPoints || [],
+        recommendations: fallback.recommendations || [],
+        detailedInstructions: fallback.detailedInstructions || '',
+        sideEffects: fallback.sideEffects || [],
+        precautions: fallback.precautions || [],
+        aiPowered: false,
+        language,
+        aiWarning: '⚠️ AI not configured. Showing rule-based analysis.',
+      });
     }
 
     // PROMPT #87-#88: Enhanced language instructions for better layman explanations
@@ -1237,10 +1308,9 @@ Format your response as JSON:
 
     const jsonResponse = await generateJsonWithGemini(prompt);
     if ((language === 'hindi' || language === 'gujarati') && isEnglishOnlyText(jsonResponse?.summary || '')) {
-      const fallback = type === 'prescription'
-        ? ruleBasedPrescriptionSummary(content, language)
-        : ruleBasedAnalysis(content, language);
-      return res.json({ ...fallback, aiPowered: false, language });
+      return res.status(502).json({
+        error: 'AI response language mismatch. Please retry.',
+      });
     }
 
     const response = {
@@ -1265,34 +1335,33 @@ Format your response as JSON:
     );
 
     if (!response.summary || looksGeneric) {
-      const fallback = type === 'prescription'
-        ? ruleBasedPrescriptionSummary(content, language)
-        : ruleBasedAnalysis(content, language);
-      return res.json({ ...fallback, aiPowered: false, language });
+      return res.status(502).json({
+        error: 'AI returned low-quality generic output. Please retry.',
+      });
     }
 
     res.json(response);
   } catch (error) {
-
-    // Fallback on any Gemini failure
+    // Any Gemini/network failure — fall back to rule-based instead of crashing
+    console.warn('[Gemini] /summarize error, using rule-based fallback:', error.message);
     try {
-      const { content, type, language = 'english' } = req.body;
       const fallback = type === 'prescription'
-        ? ruleBasedPrescriptionSummary(content || '', language)
-        : ruleBasedAnalysis(content || '', language);
-      return res.json({ ...fallback, aiPowered: false });
-    } catch (_) {}
-    const rawMessage = String(error?.message || '').toLowerCase();
-    const userMessage = rawMessage.includes('503') || rawMessage.includes('service unavailable')
-      ? 'AI service is busy right now. Please try again in a minute.'
-      : rawMessage.includes('429') || rawMessage.includes('quota')
-        ? 'Daily AI limit is reached. Please try again later.'
-        : 'Could not generate AI summary right now. Please try again.';
-
-    res.status(500).json({
-      error: userMessage,
-      message: error.message,
-    });
+        ? ruleBasedPrescriptionSummary(content, language)
+        : ruleBasedAnalysis(content, language);
+      return res.json({
+        summary: fallback.summary || '',
+        keyPoints: fallback.keyPoints || [],
+        recommendations: fallback.recommendations || [],
+        detailedInstructions: fallback.detailedInstructions || '',
+        sideEffects: fallback.sideEffects || [],
+        precautions: fallback.precautions || [],
+        aiPowered: false,
+        language,
+        aiWarning: '⚠️ AI unavailable. Showing rule-based analysis.',
+      });
+    } catch (fallbackErr) {
+      return res.status(500).json({ error: 'Could not process document. Please try again.', message: error.message });
+    }
   }
 });
 
@@ -1300,19 +1369,38 @@ Format your response as JSON:
  * POST /ai/analyze-report
  * Analyze a medical report text using Gemini
  */
+const detectNonMedicalContent = (summary = '', keyPoints = []) => {
+  const combined = `${String(summary || '')} ${(Array.isArray(keyPoints) ? keyPoints.join(' ') : '')}`.toLowerCase();
+  return [
+    'does not appear to be a medical',
+    'no medical content detected',
+    'non-medical document detected',
+    'मेडिकल सामग्री नहीं मिली',
+    'मेडिकल रिपोर्ट या प्रिस्क्रिप्शन जैसा नहीं',
+    'મેડિકલ સામગ્રી મળી નથી',
+    'મેડિકલ રિપોર્ટ અથવા પ્રિસ્ક્રિપ્શન જેવો લાગતો નથી'
+  ].some((p) => combined.includes(p));
+};
+
 router.post('/analyze-report', protect, async (req, res) => {
+  let language = 'english';
   try {
-    const { type, content, language = 'english', detailedMode = false } = req.body;
+    const { type, content, language: requestLanguage = 'english', detailedMode = false } = req.body;
+    language = String(requestLanguage || 'english').toLowerCase().trim();
+    if (!['gujarati', 'hindi', 'english'].includes(language)) {
+      language = 'english';
+    }
     const normalizedContent = String(content || '');
     const lower = normalizedContent.toLowerCase();
 
     const looksLikePrescription = (lower.includes('prescription') || lower.includes('medications') || lower.includes('doctor') || lower.includes('dr')) &&
       (lower.includes('dosage') || lower.includes('frequency') || lower.includes('duration') || lower.includes('tablet') || lower.includes('medicine'));
 
-    // If content is missing or too short, fall back to a generic rule-based response
+    // If content is missing or too short, return explicit error instead of generic fallback
     if (!normalizedContent || normalizedContent.trim().length < 5) {
-      const fallback = ruleBasedAnalysis(content || '', language);
-      return res.json({ ...fallback, aiPowered: false, isMedical: false });
+      return res.status(422).json({
+        error: 'No readable medical content found. Please upload a clearer medical report.',
+      });
     }
 
     const compactText = (value = '', maxSentences = 3) => {
@@ -1332,19 +1420,6 @@ router.post('/analyze-report', protect, async (req, res) => {
         .slice(0, maxItems);
     };
 
-    const detectNonMedical = (summary = '', keyPoints = []) => {
-      const combined = `${String(summary || '')} ${(Array.isArray(keyPoints) ? keyPoints.join(' ') : '')}`.toLowerCase();
-      return [
-        'does not appear to be a medical',
-        'no medical content detected',
-        'non-medical document detected',
-        'मेडिकल सामग्री नहीं मिली',
-        'मेडिकल रिपोर्ट या प्रिस्क्रिप्शन जैसा नहीं',
-        'મેડિકલ સામગ્રી મળી નથી',
-        'મેડિકલ રિપોર્ટ અથવા પ્રિસ્ક્રિપ્શન જેવો લાગતો નથી'
-      ].some((p) => combined.includes(p));
-    };
-
     const normalizeStepText = (value = '', lang = 'english') => {
       const text = String(value || '').trim();
       if (!text) return '';
@@ -1358,9 +1433,20 @@ router.post('/analyze-report', protect, async (req, res) => {
     };
 
     if (!hasGeminiKey()) {
-      // Fallback: rule-based analysis
+      console.warn('[Gemini] No key — using rule-based analyze-report fallback');
       const fallback = ruleBasedAnalysis(normalizedContent, language);
-      return res.json({ ...fallback, aiPowered: false });
+      return res.json({
+        summary: fallback.summary || '',
+        keyPoints: fallback.keyPoints || [],
+        recommendations: fallback.recommendations || [],
+        detailedInstructions: fallback.detailedInstructions || '',
+        sideEffects: fallback.sideEffects || [],
+        precautions: fallback.precautions || [],
+        aiPowered: false,
+        detectedType: looksLikePrescription ? 'prescription' : 'report',
+        isMedical: true,
+        aiWarning: '⚠️ AI not configured. Showing rule-based analysis.',
+      });
     }
 
     const languageInstruction = language === 'hindi' 
@@ -1523,25 +1609,30 @@ ${normalizedContent}
     );
 
     if (!response.summary || looksGeneric) {
-      const fallback = looksLikePrescription
-        ? buildDetailedPrescriptionLaymanAnalysis(normalizedContent, language)
-        : ruleBasedAnalysis(normalizedContent, language);
-      return res.json({ ...fallback, aiPowered: false, detectedType: looksLikePrescription ? 'prescription' : 'report', isMedical: !detectNonMedical(fallback?.summary, fallback?.keyPoints) });
+      return res.status(502).json({
+        error: 'AI returned low-quality generic output. Please retry.',
+      });
     }
 
-    res.json({ ...response, isMedical: !detectNonMedical(response.summary, response.keyPoints) });
+    res.json({ ...response, isMedical: !detectNonMedicalContent(response.summary, response.keyPoints) });
   } catch (error) {
-
-    // Fallback on any Gemini failure
+    console.warn('[Gemini] /analyze-report error, using rule-based fallback:', error.message);
     try {
-      const { content, language = 'english' } = req.body;
-      const fallback = ruleBasedAnalysis(content || '', language);
-      return res.json({ ...fallback, aiPowered: false, isMedical: !detectNonMedical(fallback?.summary, fallback?.keyPoints) });
-    } catch (_) {}
-    res.status(500).json({
-      error: 'Failed to analyze report',
-      message: error.message,
-    });
+      const fallback = ruleBasedAnalysis(String(req.body?.content || ''), language);
+      return res.json({
+        summary: fallback.summary || '',
+        keyPoints: fallback.keyPoints || [],
+        recommendations: fallback.recommendations || [],
+        detailedInstructions: fallback.detailedInstructions || '',
+        sideEffects: fallback.sideEffects || [],
+        precautions: fallback.precautions || [],
+        aiPowered: false,
+        isMedical: true,
+        aiWarning: '⚠️ AI unavailable. Showing rule-based analysis.',
+      });
+    } catch (fallbackErr) {
+      return res.status(500).json({ error: 'Failed to analyze report. Please try again.', message: error.message });
+    }
   }
 });
 
@@ -1733,31 +1824,71 @@ router.post('/analyze-medical-document', protect, upload.single('file'), async (
     // ═══════════════════════════════════════════════════════
     // 🟢 PHASE 5 — AI ANALYSIS & JSON GENERATION
     // ═══════════════════════════════════════════════════════
-    const useGemini = hasGeminiKey();
+    // 🟢 PHASE 5 — AI ANALYSIS (with automatic rule-based fallback)
+    // ═══════════════════════════════════════════════════════
     let analysisResult;
+    let aiPowered = false;
+    let aiWarning = null;
 
-    if (useGemini) {
-      // Use AI for comprehensive analysis
-      analysisResult = await analyzeMedicalDocumentWithGemini(extractedText, documentType, inputType);
+    if (hasGeminiKey()) {
+      try {
+        analysisResult = await analyzeMedicalDocumentWithGemini(extractedText, documentType, inputType);
+        aiPowered = true;
+      } catch (aiError) {
+        const msg = String(aiError?.message || '');
+        const isRevoked = /403|leaked|revoked|permission/i.test(msg);
+        const isQuota   = /429|quota/i.test(msg);
+        const isBusy    = /503|service unavailable/i.test(msg);
+
+        if (isRevoked) {
+          aiWarning = '⚠️ AI analysis unavailable (API keys revoked). Showing rule-based analysis instead.';
+          console.warn('[Gemini] All keys revoked — falling back to rule-based analysis');
+        } else if (isQuota) {
+          aiWarning = '⚠️ Tried all configured Gemini keys, but quota is exhausted for all of them. Showing rule-based analysis instead.';
+          console.warn('[Gemini] Quota exceeded — falling back to rule-based analysis');
+        } else if (isBusy) {
+          aiWarning = '⚠️ AI is busy right now. Showing rule-based analysis instead.';
+          console.warn('[Gemini] Service busy — falling back to rule-based analysis');
+        } else {
+          aiWarning = '⚠️ AI analysis unavailable. Showing rule-based analysis instead.';
+          console.warn('[Gemini] Error — falling back to rule-based analysis:', msg);
+        }
+
+        // Graceful fallback — never crash the upload
+        analysisResult = analyzeMedicalDocumentRuleBased(extractedText, documentType, inputType);
+        aiPowered = false;
+      }
     } else {
-      // Fallback to rule-based analysis
+      // No keys configured at all — use rule-based silently
+      console.warn('[Gemini] No API key configured — using rule-based analysis');
+      aiWarning = '⚠️ AI not configured. Showing rule-based analysis instead.';
       analysisResult = analyzeMedicalDocumentRuleBased(extractedText, documentType, inputType);
+      aiPowered = false;
     }
 
     // Clean up uploaded file
     await fs.promises.unlink(uploadedPath).catch(() => {});
 
-    // Return the structured JSON response
-    res.json(analysisResult);
+    // Ensure status is set even if Gemini omitted it
+    const finalResult = {
+      status: 'success',
+      ...(analysisResult || {}),
+      aiPowered,
+      ...(aiWarning ? { aiWarning } : {}),
+    };
+
+    res.json(finalResult);
 
   } catch (error) {
-
     if (uploadedPath) {
       await fs.promises.unlink(uploadedPath).catch(() => {});
     }
+    const msg = String(error?.message || '');
     res.status(500).json({
       status: 'error',
-      message: 'An error occurred while processing your document. Please try again.'
+      message: msg.includes('key missing') || msg.includes('Gemini')
+        ? '⚠️ Gemini is not configured correctly. Check GEMINI_API_KEY in backend .env'
+        : 'An error occurred while processing your document. Please try again.',
     });
   }
 });
@@ -1770,23 +1901,30 @@ router.post('/analyze-medical-document', protect, upload.single('file'), async (
  * Validate if text contains medical content
  */
 function validateMedicalContent(text) {
-  const lowerText = text.toLowerCase();
-  const medicalKeywords = [
-    'patient', 'doctor', 'dr.', 'prescription', 'medication', 'medicine',
-    'dosage', 'diagnosis', 'treatment', 'symptom', 'disease', 'condition',
-    'blood', 'glucose', 'cholesterol', 'hemoglobin', 'test', 'lab', 'report',
-    'hospital', 'clinic', 'medical', 'health', 'pharmacy', 'tablet', 'capsule',
-    'mg', 'ml', 'injection', 'syrup', 'examination', 'findings', 'impression',
-    'x-ray', 'scan', 'mri', 'ct', 'ultrasound', 'radiology', 'imaging',
-    // Hindi/Gujarati support
-    'मरीज', 'डॉक्टर', 'दवा', 'रिपोर्ट', 'जांच', 'निदान',
-    'દર્દી', 'ડૉક્ટર', 'દવા', 'રિપોર્ટ', 'ટેસ્ટ', 'નિદાન'
+  const lowerText = String(text || '').toLowerCase();
+  const strongMedicalKeywords = [
+    'prescription', 'diagnosis', 'medication', 'dosage', 'tablet', 'capsule', 'syrup', 'injection',
+    'blood pressure', 'hemoglobin', 'glucose', 'cholesterol', 'creatinine', 'platelet', 'wbc', 'rbc',
+    'x-ray', 'mri', 'ct scan', 'ultrasound', 'radiology',
+    'मरीज', 'डॉक्टर', 'दवा', 'निदान', 'जांच',
+    'દર્દી', 'ડૉક્ટર', 'દવા', 'નિદાન', 'ટેસ્ટ'
   ];
-  
-  const matchCount = medicalKeywords.filter(keyword => lowerText.includes(keyword)).length;
+  const weakMedicalKeywords = [
+    'patient', 'doctor', 'hospital', 'clinic', 'lab', 'report', 'medical', 'health', 'test', 'findings', 'impression'
+  ];
+
+  const strongMatches = strongMedicalKeywords.filter((keyword) => lowerText.includes(keyword)).length;
+  const weakMatches = weakMedicalKeywords.filter((keyword) => lowerText.includes(keyword)).length;
   const hasMedicalUnits = /(\d+\s?(mg|ml|mmhg|bpm|g\/dl|mmol|mcg|iu))/i.test(lowerText);
-  const hasPrescriptionPattern = /(medication|dosage|frequency|duration|tablet|capsule|rx)/i.test(lowerText);
-  return matchCount >= 2 || hasMedicalUnits || hasPrescriptionPattern;
+  const hasPrescriptionPattern = /(rx\b|dosage|frequency|duration|tablet|capsule|take\s+once|take\s+twice)/i.test(lowerText);
+
+  // Reject obvious technical/non-medical documents early
+  const technicalNonMedicalPattern = /(\bdocument object model\b|\bdom\b.*\btable\b|\bdom summary\b|\bhtml element\b|\bjavascript\b|\bjsdom\b|\breact\b.*\bcomponent\b|\bnode\.js\b|\btypescript\b|\bwebpack\b|\bvite\b|\bapi endpoint\b|\bhttp request\b|\bconsole\.log\b|\binner html\b|\bquery selector\b|\bdocument\.get|\bdom tree\b|\bdom node\b|\bdom manipulation\b)/i;
+  if (technicalNonMedicalPattern.test(lowerText) && strongMatches === 0 && !hasMedicalUnits) {
+    return false;
+  }
+
+  return strongMatches >= 1 || hasMedicalUnits || hasPrescriptionPattern || weakMatches >= 4;
 }
 
 /**
@@ -1828,6 +1966,9 @@ function detectDocumentType(text) {
  * Analyze medical document using Gemini
  */
 async function analyzeMedicalDocumentWithGemini(extractedText, documentType, inputType) {
+  // Truncate to ~6000 chars to stay within Gemini input token limits while preserving detail
+  const safeText = String(extractedText || '').slice(0, 6000);
+
   const systemPrompt = `You are a medical document OCR reader and analyzer. You receive extracted text from medical documents and return structured JSON analysis.
 
 CRITICAL RULES:
@@ -1842,13 +1983,13 @@ CRITICAL RULES:
   const userPrompt = `Analyze this ${documentType} document and return the exact JSON structure specified.
 
 EXTRACTED TEXT:
-${extractedText}
+${safeText}
 
 Return a comprehensive JSON object with these exact fields:
 - status: "success"
 - input_type: "${inputType}"
 - document_type: "${documentType}"
-- ocr_extracted_text: (full extracted text)
+- ocr_extracted_text: "(include first 500 chars of extracted text here)"
 - overview: {hospital_or_lab, doctor_name, patient_name, patient_age, date, diagnosis}
 - medicines: [] (array of detailed medicine objects with name, generic_name, what_it_does, dosage, frequency, timing array, take_with, duration, side_effects array, what_to_avoid array, important_tip)
 - lab_results: [] (array with test_name, your_value, normal_range, status, status_emoji, what_it_means array, what_to_do array)
@@ -1861,12 +2002,8 @@ Return a comprehensive JSON object with these exact fields:
 
 Remember: Use emojis, make it patient-friendly, arrays for all lists, never paragraphs.`;
 
-  try {
-    const aiResponse = await generateJsonWithGemini(`${systemPrompt}\n\n${userPrompt}`);
-    return aiResponse;
-  } catch (aiError) {
-    return analyzeMedicalDocumentRuleBased(extractedText, documentType, inputType);
-  }
+  const aiResponse = await generateJsonWithGemini(`${systemPrompt}\n\n${userPrompt}`);
+  return aiResponse;
 }
 
 /**
@@ -1877,6 +2014,35 @@ function analyzeMedicalDocumentRuleBased(extractedText, documentType, inputType)
   const overview = extractOverview(extractedText);
   const medicines = documentType === 'prescription' ? extractMedicines(extractedText) : [];
   const labResults = documentType === 'lab_report' ? extractLabResults(extractedText) : [];
+  const diagnosisText = String(overview.diagnosis || '').trim();
+  const medicineCount = Array.isArray(medicines) ? medicines.length : 0;
+  const labCount = Array.isArray(labResults) ? labResults.length : 0;
+
+  const summaryLead = documentType === 'prescription'
+    ? (diagnosisText
+        ? `🩺 This appears to be a prescription for ${diagnosisText}.`
+        : '🩺 This appears to be a doctor prescription document.')
+    : documentType === 'lab_report'
+      ? `🧪 This appears to be a lab report with ${labCount || 'multiple'} measurable test result${labCount === 1 ? '' : 's'}.`
+      : documentType === 'radiology_report'
+        ? '🩻 This appears to be a radiology/imaging report.'
+        : '🩺 This appears to be a medical document.';
+
+  const summaryPoints = [
+    summaryLead,
+    medicineCount > 0
+      ? `💊 Detected ${medicineCount} medicine entr${medicineCount === 1 ? 'y' : 'ies'} from the document text.`
+      : null,
+    labCount > 0
+      ? `📊 Detected ${labCount} lab value entr${labCount === 1 ? 'y' : 'ies'} to review with your doctor.`
+      : null,
+    '🧪 Track any test results and share with your doctor',
+    '⚠️ Watch for any unusual symptoms or side effects',
+    '🥗 Maintain a healthy diet and lifestyle',
+    '🏃 Stay physically active as recommended',
+    '📅 Schedule follow-up appointments as advised',
+    '🚨 Seek emergency care if you experience severe symptoms',
+  ].filter(Boolean);
   
   return {
     status: 'success',
@@ -1939,16 +2105,7 @@ function analyzeMedicalDocumentRuleBased(extractedText, documentType, inputType)
     },
     
     summary: {
-      overview_points: [
-        '🩺 Medical document analyzed successfully',
-        '💊 Review all medications and follow prescribed dosages',
-        '🧪 Track any test results and share with your doctor',
-        '⚠️ Watch for any unusual symptoms or side effects',
-        '🥗 Maintain a healthy diet and lifestyle',
-        '🏃 Stay physically active as recommended',
-        '📅 Schedule follow-up appointments as advised',
-        '🚨 Seek emergency care if you experience severe symptoms'
-      ]
+      overview_points: summaryPoints
     },
     
     disclaimer: '⚕️ This analysis is AI-generated for informational purposes only. Always consult your doctor or pharmacist before making any medical decisions.'

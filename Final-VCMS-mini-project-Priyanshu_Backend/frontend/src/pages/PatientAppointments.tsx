@@ -6,13 +6,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
-import { CalendarDays, Clock, MapPin, Stethoscope, IndianRupee, Video, Trash2, AlertTriangle, FileText, CheckCircle, XCircle, Activity, Star, RefreshCw } from "lucide-react";
+import { CalendarDays, Clock, MapPin, Stethoscope, IndianRupee, Video, Trash2, AlertTriangle, FileText, XCircle, Activity, RefreshCw, Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { formatLocation } from "@/utils/formatLocation";
 import api from "@/services/api";
 import StatusBadge from "@/components/StatusBadge";
+import RateButton from "@/components/RateButton";
 
 interface CancelDialogState {
   open: boolean;
@@ -39,13 +40,26 @@ const PatientAppointments = () => {
     .filter((a) => a.patientId === user?._id)
     .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
 
-  const [tab, setTab] = useState<"all" | "upcoming" | "completed" | "cancelled">("all");
+  const [tab, setTab] = useState<"all" | "accepted" | "upcoming" | "completed" | "cancelled">("all");
+  const [refreshing, setRefreshing] = useState(false);
+  const [showReviewDialog, setShowReviewDialog] = useState(false);
+  const [reviewAppointment, setReviewAppointment] = useState<any | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
 
-  const upcomingApts = myAppointments.filter(a => ["Booked", "Accepted", "In Progress"].includes(a.status));
+  const todayDate = new Date().toISOString().split("T")[0];
+  const normalizeStatus = (status?: string) => String(status || "").toLowerCase();
+  const isJoinEnabledStatus = (status?: string) => ["accepted", "in progress", "in-progress"].includes(normalizeStatus(status));
+  const isBookedStatus = (status?: string) => normalizeStatus(status) === "booked";
+
+  const acceptedApts = myAppointments.filter(a => isJoinEnabledStatus(a.status));
+  const upcomingApts = myAppointments.filter(a => a.date > todayDate && isBookedStatus(a.status));
   const completedApts = myAppointments.filter(a => a.status === "Completed");
   const cancelledApts = myAppointments.filter(a => a.status === "Cancelled");
 
   const displayedApts =
+    tab === "accepted" ? acceptedApts :
     tab === "upcoming" ? upcomingApts :
     tab === "completed" ? completedApts :
     tab === "cancelled" ? cancelledApts :
@@ -122,6 +136,52 @@ const PatientAppointments = () => {
     }
   };
 
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    try {
+      setRefreshing(true);
+      await Promise.resolve(fetchAppointments());
+      toast({ title: "Refreshed", description: "Appointments updated." });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const openReviewDialog = (appointment: any) => {
+    setReviewAppointment(appointment);
+    setReviewRating(5);
+    setReviewComment("");
+    setShowReviewDialog(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewAppointment?._id || !reviewAppointment?.doctorId) return;
+
+    try {
+      setSubmittingReview(true);
+      const doctorId = String(reviewAppointment.doctorId);
+      const result = await api.post('/public/reviews', {
+        appointmentId: reviewAppointment._id,
+        doctorId,
+        rating: reviewRating,
+        comment: reviewComment,
+      });
+
+      if (result.data?.success) {
+        toast({ title: "Thank you!", description: "Your rating was submitted successfully." });
+        setShowReviewDialog(false);
+        setReviewAppointment(null);
+        await Promise.resolve(fetchAppointments());
+      } else {
+        toast({ title: "Error", description: result.data?.message || "Could not submit rating", variant: "destructive" });
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.response?.data?.message || "Could not submit rating", variant: "destructive" });
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <div className="container mx-auto px-6 py-8 space-y-6 max-w-7xl pb-12">
@@ -144,10 +204,13 @@ const PatientAppointments = () => {
         <div className="flex gap-1.5">
           {[
             { key: "all",       label: "All",       count: myAppointments.length },
+            { key: "accepted",  label: "Accepted",  count: acceptedApts.length },
             { key: "upcoming",  label: "Upcoming",  count: upcomingApts.length },
             { key: "completed", label: "Completed", count: completedApts.length },
             { key: "cancelled", label: "Cancelled", count: cancelledApts.length },
-          ].map(({ key, label, count }) => (
+          ].map(({ key, label, count }) => {
+            const isAcceptedAttention = key === "accepted" && count > 0;
+            return (
             <button
               key={key}
               onClick={() => setTab(key as any)}
@@ -155,9 +218,14 @@ const PatientAppointments = () => {
                 tab === key 
                   ? "bg-sky-500 text-white shadow-sm" 
                   : "bg-white text-slate-700 hover:bg-slate-50 hover:shadow-sm"
+              } ${
+                isAcceptedAttention ? "animate-pulse ring-2 ring-emerald-200/80" : ""
               }`}
             >
-              {label}
+              <span className="inline-flex items-center gap-1.5">
+                {label}
+                {isAcceptedAttention && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+              </span>
               {count > 0 && (
                 <span className={`text-xs rounded-full px-2 py-0.5 font-bold ${
                   tab === key ? "bg-white/25 text-white" : "bg-slate-100 text-slate-600"
@@ -166,15 +234,17 @@ const PatientAppointments = () => {
                 </span>
               )}
             </button>
-          ))}
+            );
+          })}
         </div>
         <Button
           size="sm"
-          onClick={() => fetchAppointments()}
-          className="gap-2 bg-sky-500 hover:bg-sky-600 text-white font-semibold h-fit rounded-xl ml-auto"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="ml-auto min-w-[140px] justify-center gap-2 rounded-xl bg-sky-500 px-5 py-2.5 text-white font-semibold shadow-sm hover:bg-sky-600"
         >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Refreshing...' : 'Refresh'}
         </Button>
       </div>
 
@@ -188,7 +258,9 @@ const PatientAppointments = () => {
             <div>
               <p className="font-bold text-slate-900 text-lg">No Appointments Found</p>
               <p className="text-sm text-slate-600 mt-1.5 max-w-sm">
-                {tab === "upcoming" 
+                {tab === "accepted"
+                  ? "No accepted appointments yet. Once accepted by doctor, they will appear here."
+                  : tab === "upcoming" 
                   ? "You don't have any upcoming appointments. Book one from the dashboard to get started!" 
                   : tab === "completed"
                   ? "No completed appointments yet. Your consultation history will appear here."
@@ -230,7 +302,8 @@ const PatientAppointments = () => {
                 {displayedApts.map((apt, index) => {
                   const rx = getPrescriptionByAppointment(apt._id);
                   const statusLower = apt.status.toLowerCase();
-                  const canJoin = statusLower === "accepted" || statusLower === "in progress" || statusLower === "in-progress";
+                  const canJoin = statusLower === "in progress" || statusLower === "in-progress";
+                  const waitingForDoctor = statusLower === "accepted";
                   const isCompleted = statusLower === "completed";
                   const isCancelled = statusLower === "cancelled";
 
@@ -313,15 +386,22 @@ const PatientAppointments = () => {
                               <Video className="h-3 w-3" /> Join
                             </Button>
                           )}
-                          {isCompleted && (
+                          {waitingForDoctor && (
                             <Button
                               size="sm"
-                              className="h-8 rounded-lg text-xs gap-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold"
-                              onClick={() => navigate(`/doctor-feedback?appointmentId=${apt._id}`)}
+                              variant="outline"
+                              disabled
+                              className="h-8 rounded-lg text-xs gap-1 border-amber-200 text-amber-700 bg-amber-50 font-semibold"
+                              title="Waiting for doctor to start"
                             >
-                              <Star className="h-3 w-3 fill-sky-400" />
-                              Rate
+                              <Clock className="h-3 w-3" /> Waiting for Doctor
                             </Button>
+                          )}
+                          {isCompleted && (
+                            <RateButton
+                              rated={!!apt.reviewSubmitted}
+                              onClick={() => openReviewDialog(apt)}
+                            />
                           )}
                           {rx ? (
                             <Button
@@ -400,6 +480,54 @@ const PatientAppointments = () => {
             </Button>
             <Button variant="destructive" onClick={handleCancelAppointment} disabled={cancelDialog.loading}>
               {cancelDialog.loading ? "Cancelling..." : "Confirm Cancellation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rate Doctor Dialog */}
+      <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
+        <DialogContent className="max-w-md rounded-2xl border border-slate-200 shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900 font-bold">Rate Doctor</DialogTitle>
+            <DialogDescription className="text-slate-600">
+              Share your consultation feedback.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-700 mb-2">Star Rating</p>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-amber-50"
+                  >
+                    <Star className={`h-4 w-4 ${star <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Comment (optional)</label>
+              <Textarea
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="Share your experience"
+                rows={3}
+                className="mt-2"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowReviewDialog(false)} className="rounded-xl border-slate-200">Cancel</Button>
+            <Button onClick={handleSubmitReview} disabled={submittingReview} className="rounded-xl bg-sky-500 hover:bg-sky-600 text-white">
+              {submittingReview ? 'Submitting...' : 'Submit Rating'}
             </Button>
           </DialogFooter>
         </DialogContent>

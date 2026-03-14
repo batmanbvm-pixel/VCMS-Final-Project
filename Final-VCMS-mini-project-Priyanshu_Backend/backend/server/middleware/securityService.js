@@ -84,7 +84,7 @@ function applySecurityHeaders(req, res, next) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
-    res.setHeader('Permissions-Policy', "geolocation=(), microphone=()");
+    res.setHeader('Permissions-Policy', "geolocation=(), microphone=(self), camera=(self)");
   } catch (err) {
     // Non-fatal
   }

@@ -5,6 +5,10 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cookieParser = require("cookie-parser"); // ✅ NEW: For httpOnly cookie support
 const connectDB = require("./config/db");
+const Appointment = require("./models/Appointment");
+const User = require("./models/User");
+const Notification = require("./models/Notification");
+const { sendSystemEmail } = require("./utils/emailOtp");
 
 // Security middleware
 const {
@@ -153,7 +157,11 @@ app.get("/", (req, res) => {
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
-      if (!origin || /^http:\/\/localhost:\d+$/.test(origin)) {
+      if (
+        !origin ||
+        /^https?:\/\/localhost:\d+$/.test(origin) ||
+        /^https?:\/\/127\.0\.0\.1:\d+$/.test(origin)
+      ) {
         callback(null, true);
       } else if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) {
         callback(null, true);
@@ -171,6 +179,7 @@ socketHandler.init(io);
 
 const onlineUsers = new Map();
 socketHandler.setOnlineUsersMap(onlineUsers);
+const waitingAlertThrottle = new Map();
 
 io.on("connection", (socket) => {
 
@@ -328,6 +337,124 @@ io.on("connection", (socket) => {
       from: userId || socket.id,
       appointmentId,
     }, onlineUsers);
+  });
+
+  // Presence signal for dashboard/video waiting indicators
+  socket.on("video:waiting-status", async (data) => {
+    const { to, appointmentId, waiting, role } = data || {};
+    // socketUserMap (socketId → userId) gives the correct sender identity;
+    // onlineUsers is userId → socketId so cannot be used with socket.id as key.
+    const userId = socketHandler.getUserIdBySocket(socket.id) || socket.handshake.auth?.userId;
+
+    if (!to || !appointmentId) return;
+
+    const fromUserId = String(userId || "");
+    let fromUser = null;
+    let toUser = null;
+    let appointment = null;
+
+    try {
+      [fromUser, toUser, appointment] = await Promise.all([
+        fromUserId ? User.findById(fromUserId).select("name email role") : null,
+        User.findById(to).select("name email role"),
+        Appointment.findById(appointmentId).select("status patientId doctorId date time"),
+      ]);
+
+      // Keep appointment flow synchronized: when either side joins from confirmed state,
+      // mark as in-progress and notify both dashboards.
+      if (waiting && appointment && appointment.status === "confirmed") {
+        appointment.status = "in-progress";
+        await appointment.save();
+        socketHandler.emitAppointmentStatusChanged(
+          appointment._id,
+          appointment.patientId,
+          appointment.doctorId,
+          "in-progress"
+        );
+      }
+    } catch (_) {
+      // Enrichment failure should not block socket relay
+    }
+
+    socketHandler.emitToUser(to, "video:waiting-status", {
+      from: userId || socket.id,
+      fromName: fromUser?.name || "",
+      appointmentId,
+      waiting: !!waiting,
+      role,
+    }, onlineUsers);
+
+    // Notify + email only when user starts waiting (avoid spam on false state)
+    if (!waiting || !fromUser || !toUser || !appointment) return;
+
+    const throttleKey = `${appointmentId}:${fromUserId}->${String(to)}`;
+    const now = Date.now();
+    const lastSentAt = waitingAlertThrottle.get(throttleKey) || 0;
+    if (now - lastSentAt < 90 * 1000) return;
+    waitingAlertThrottle.set(throttleKey, now);
+
+    const isDoctorWaiting = String(role || "").toLowerCase() === "doctor";
+    const fromName = String(fromUser.name || (isDoctorWaiting ? "Doctor" : "Patient"));
+    const toName = String(toUser.name || "User");
+    const doctorDisplay = `Dr. ${fromName.replace(/^dr\.?\s*/i, "").trim()}`;
+    const frontendBase = String(process.env.FRONTEND_URL || "http://localhost:8080").replace(/\/$/, "");
+    const joinLink = `${frontendBase}/video/${appointmentId}`;
+    const aptDate = appointment?.date ? new Date(appointment.date).toLocaleDateString("en-IN") : "Today";
+    const aptTime = appointment?.time || "Scheduled time";
+
+    const title = isDoctorWaiting
+      ? "Doctor is waiting - Join now"
+      : "Patient joined - Please join now";
+
+    const message = isDoctorWaiting
+      ? `${doctorDisplay}'s appointment is in progress. Please join now.`
+      : `Patient ${fromName} joined. Please join now.`;
+
+    try {
+      const notif = await Notification.create({
+        userId: toUser._id,
+        title,
+        message,
+        type: "appointment",
+        from: fromUser._id,
+        link: `/video/${appointmentId}`,
+        priority: "high",
+        data: {
+          appointmentId,
+          waiting: true,
+          role,
+          fromName,
+        },
+      });
+      socketHandler.emitToUser(String(toUser._id), "notification", notif, onlineUsers);
+    } catch (_) {
+      // Notification creation failure should not block flow
+    }
+
+    try {
+      await sendSystemEmail({
+        to: toUser.email,
+        subject: `MediConnect: ${title}`,
+        text: `${message}\n\nAppointment: ${aptDate} ${aptTime}\nJoin now: ${joinLink}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; border:1px solid #a7f3d0; border-radius: 10px; overflow:hidden;">
+            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 16px 20px;">
+              <h2 style="margin:0; font-size:18px;">${title}</h2>
+            </div>
+            <div style="padding: 18px 20px; background:#ecfdf5;">
+              <p style="margin:0 0 10px; color:#065f46; font-size:15px;"><strong>Hello ${toName},</strong></p>
+              <p style="margin:0 0 12px; color:#047857; font-size:14px;">${message}</p>
+              <p style="margin:0 0 16px; color:#065f46; font-size:13px;">Appointment: <strong>${aptDate}</strong> at <strong>${aptTime}</strong></p>
+              <a href="${joinLink}" style="display:inline-block; background:#059669; color:white; text-decoration:none; padding:10px 14px; border-radius:8px; font-weight:700;">Join Video Consultation</a>
+              <p style="margin:12px 0 0; color:#065f46; font-size:12px;">If button does not open, copy this link in browser:</p>
+              <p style="margin:4px 0 0; color:#047857; font-size:12px; word-break: break-all;">${joinLink}</p>
+            </div>
+          </div>
+        `,
+      });
+    } catch (_) {
+      // Email failure should not block real-time flow
+    }
   });
 
   // ✅ NEW: Consultation completion event

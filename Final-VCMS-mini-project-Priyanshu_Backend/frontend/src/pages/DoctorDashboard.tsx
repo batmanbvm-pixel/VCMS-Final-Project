@@ -53,16 +53,33 @@ const DoctorDashboard = () => {
       .join(" ");
   };
 
+  const getRxStatusLabel = (status?: string) => {
+    const normalized = String(status || "draft").toLowerCase();
+    if (normalized === "draft") return "Draft Saved";
+    if (normalized === "issued") return "Issued";
+    if (normalized === "viewed") return "Viewed";
+    if (normalized === "picked_up") return "Picked Up";
+    if (normalized === "cancelled") return "Cancelled";
+    return "Added";
+  };
+
+  const getRxStatusStyles = (status?: string) => {
+    const normalized = String(status || "draft").toLowerCase();
+    if (normalized === "draft") return "bg-amber-50 border-amber-200 text-amber-700";
+    if (normalized === "cancelled") return "bg-red-50 border-red-200 text-red-700";
+    return "bg-emerald-50 border-emerald-200 text-emerald-700";
+  };
+
   const myAppointments = appointments.filter((a) => a.doctorId === user?._id || a.doctorId === user?.id);
 
-  const pendingAppointments = myAppointments.filter((a) => normalizedStatus(a.status) === "booked" || normalizedStatus(a.status) === "pending");
-  const todayAppointments = myAppointments.filter((a) => {
-    const aptDate = a.date;
-    const isToday = aptDate === today;
-    const notCancelledOrCompleted = !["cancelled", "completed"].includes(normalizedStatus(a.status));
-    return isToday && notCancelledOrCompleted;
-  });
-  const upcomingAppointments = myAppointments.filter((a) => a.date > today && normalizedStatus(a.status) === "accepted");
+  const isPendingStatus = (status?: string) => ["booked", "pending"].includes(normalizedStatus(status));
+  const isAcceptedStatus = (status?: string) => ["accepted", "in progress", "in-progress"].includes(normalizedStatus(status));
+  const isActiveStatus = (status?: string) => isPendingStatus(status) || isAcceptedStatus(status);
+
+  const pendingAppointments = myAppointments.filter((a) => isPendingStatus(a.status));
+  const acceptedAppointments = myAppointments.filter((a) => isAcceptedStatus(a.status));
+  const upcomingAppointments = myAppointments.filter((a) => a.date > today && isPendingStatus(a.status));
+  const activeAppointmentsCount = myAppointments.filter((a) => isActiveStatus(a.status)).length;
   const completedAppointments = myAppointments.filter((a) => normalizedStatus(a.status) === "completed");
   const uniquePatients = new Set(myAppointments.filter((a) => normalizedStatus(a.status) !== "cancelled").map((a) => a.patientId)).size;
   // Sum consultation fees from individual completed appointments (more accurate than user?.consultationFee)
@@ -89,7 +106,14 @@ const DoctorDashboard = () => {
   const [feedbackSummary, setFeedbackSummary] = useState({ total: 0, averageRating: 0 });
   const [prescriptionsCount, setPrescriptionsCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [patientWaitingByAppointment, setPatientWaitingByAppointment] = useState<Record<string, { patientName: string; updatedAt: number }>>({});
   const seenAppointmentIdsRef = useRef<Set<string>>(new Set());
+  const waitingToastRef = useRef<Set<string>>(new Set());
+
+  const patientWaitingAppointmentIds = Object.keys(patientWaitingByAppointment).filter((id) => !!patientWaitingByAppointment[id]);
+  const patientWaitingCount = patientWaitingAppointmentIds.length;
+  const firstPatientWaitingAppointmentId = patientWaitingAppointmentIds[0] || "";
+  const waitingPatientPrimaryName = patientWaitingByAppointment[firstPatientWaitingAppointmentId]?.patientName || "Patient";
 
   useEffect(() => {
     const currentIds = new Set<string>(seenAppointmentIdsRef.current);
@@ -242,6 +266,59 @@ const DoctorDashboard = () => {
     const onStatusChanged = (data: any) => {
       // Refetch appointments when status changes (for real-time "Join Video Call" button update)
       fetchAppointments();
+
+      const appointmentId = String(data?.appointmentId || "");
+      const normalizedIncomingStatus = String(data?.status || "").toLowerCase();
+      if (appointmentId && ["completed", "cancelled", "rejected"].includes(normalizedIncomingStatus)) {
+        setPatientWaitingByAppointment((prev) => {
+          if (!prev[appointmentId]) return prev;
+          const next = { ...prev };
+          delete next[appointmentId];
+          return next;
+        });
+      }
+    };
+
+    const onVideoWaitingStatus = (data: any) => {
+      const appointmentId = String(data?.appointmentId || "");
+      if (!appointmentId) return;
+
+      const role = String(data?.role || "").toLowerCase();
+      const waiting = !!data?.waiting;
+
+      // Doctor dashboard only reacts to patient waiting signal
+      if (role !== "patient") return;
+
+      const fallbackPatientName = myAppointments.find((apt: any) => String(apt._id || apt.id || "") === appointmentId)?.patientName;
+      const patientName = String(data?.fromName || data?.patientName || fallbackPatientName || "Patient");
+
+      setPatientWaitingByAppointment((prev) => {
+        if (waiting) {
+          return {
+            ...prev,
+            [appointmentId]: {
+              patientName,
+              updatedAt: Date.now(),
+            },
+          };
+        }
+        if (!prev[appointmentId]) return prev;
+        const next = { ...prev };
+        delete next[appointmentId];
+        return next;
+      });
+
+      if (waiting && !waitingToastRef.current.has(appointmentId)) {
+        waitingToastRef.current.add(appointmentId);
+        toast({
+          title: "Patient is waiting",
+          description: `${capitalizeName(patientName)} joined. Please join now.`,
+        });
+      }
+
+      if (!waiting) {
+        waitingToastRef.current.delete(appointmentId);
+      }
     };
 
     const onWarning = (data: any) => {
@@ -253,6 +330,8 @@ const DoctorDashboard = () => {
     socket.on("appointment:booked", onNewAppointment);
     socket.on("appointment:cancelled", onCancelled);
     socket.on("appointment-status-changed", onStatusChanged);
+    socket.on("appointment:status-changed", onStatusChanged);
+    socket.on("video:waiting-status", onVideoWaitingStatus);
     socket.on("notification:warning", onWarning);
     socket.on("admin:warning", onWarning);
 
@@ -261,10 +340,12 @@ const DoctorDashboard = () => {
       socket.off("appointment:booked", onNewAppointment);
       socket.off("appointment:cancelled", onCancelled);
       socket.off("appointment-status-changed", onStatusChanged);
+      socket.off("appointment:status-changed", onStatusChanged);
+      socket.off("video:waiting-status", onVideoWaitingStatus);
       socket.off("notification:warning", onWarning);
       socket.off("admin:warning", onWarning);
     };
-  }, [socket, user?._id, fetchAppointments, fetchUnreadCount, toast]);
+  }, [socket, user?._id, fetchAppointments, fetchUnreadCount, toast, myAppointments]);
 
   const handleReject = async (id: string) => {
     if (!rejectReason.trim()) { toast({ title: "Please provide a reason", variant: "destructive" }); return; }
@@ -295,6 +376,19 @@ const DoctorDashboard = () => {
     } catch {
       toast({ title: "Failed to start consultation", variant: "destructive" });
     }
+  };
+
+  const handleJoinCallFromDashboard = async (apt: any) => {
+    const aptId = String(apt?._id || apt?.id || "");
+    if (!aptId) return;
+
+    const status = normalizedStatus(apt?.status);
+    if (status === "accepted") {
+      await handleStartConsultation(aptId);
+      return;
+    }
+
+    navigate(`/video/${aptId}`);
   };
 
   const statusBadge = (status: string) => {
@@ -347,7 +441,7 @@ const DoctorDashboard = () => {
         {/* Stats ribbon */}
         <div className="border-t border-slate-200 bg-slate-50 grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-200">
           {[
-            { label: "Today",    value: todayAppointments.length,      icon: CalendarDays },
+            { label: "Accepted", value: acceptedAppointments.length,   icon: CalendarDays },
             { label: "Pending",  value: pendingAppointments.length,    icon: AlertCircle  },
             { label: "Patients", value: uniquePatients,                icon: Users        },
             { label: "Earnings", value: `₹${estimatedEarnings.toLocaleString("en-IN")}`, icon: IndianRupee },
@@ -362,6 +456,30 @@ const DoctorDashboard = () => {
           ))}
         </div>
       </div>
+
+      {patientWaitingCount > 0 && (
+        <div className="rounded-xl border border-red-200 border-l-4 border-l-red-500 bg-gradient-to-r from-red-50 to-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-red-700">
+              Patient {capitalizeName(waitingPatientPrimaryName)} joined. Please join now.
+            </p>
+            <p className="text-xs text-red-600">
+              {patientWaitingCount > 1 ? `+${patientWaitingCount - 1} more patient(s) waiting.` : "Consultation is in progress and waiting for doctor."}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-red-500 hover:bg-red-600 text-white"
+            onClick={() => {
+              if (firstPatientWaitingAppointmentId) {
+                navigate(`/video/${firstPatientWaitingAppointmentId}`);
+              }
+            }}
+          >
+            <Video className="h-4 w-4 mr-1" /> Join Now
+          </Button>
+        </div>
+      )}
 
       {/* ── Online Status & Profile Completion ── */}
       <Card className="border border-slate-200 rounded-2xl shadow-sm bg-white">
@@ -446,13 +564,20 @@ const DoctorDashboard = () => {
 
       {/* Quick cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-lg hover:border-sky-300 hover:scale-105 transition-all duration-300 flex flex-col">
+        <Card className={`bg-white border rounded-2xl hover:shadow-lg hover:border-sky-300 hover:scale-105 transition-all duration-300 flex flex-col ${
+          acceptedAppointments.length > 0
+            ? "border-sky-300 shadow-[0_0_0_2px_rgba(56,189,248,0.25),0_0_18px_rgba(14,165,233,0.25)]"
+            : "border-slate-200 shadow-sm"
+        }`}>
           <CardContent className="p-5 flex flex-col flex-1">
             <div className="flex items-center justify-between gap-3 flex-1">
               <div>
-                <p className="text-xs uppercase tracking-wide text-sky-600 font-semibold">Appointments</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{pendingAppointments.length + todayAppointments.length + upcomingAppointments.length}</p>
-                <p className="text-xs text-slate-600 mt-1">Active appointments (pending, today & upcoming)</p>
+                <p className="text-xs uppercase tracking-wide text-sky-600 font-semibold inline-flex items-center gap-1.5">
+                  Appointments
+                  {acceptedAppointments.length > 0 && <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />}
+                </p>
+                <p className="text-2xl font-bold text-slate-900 mt-1">{activeAppointmentsCount}</p>
+                <p className="text-xs text-slate-600 mt-1">Active appointments (pending, accepted & upcoming)</p>
               </div>
               <div className="h-10 w-10 rounded-xl bg-sky-100 flex items-center justify-center">
                 <CalendarDays className="h-5 w-5 text-sky-600" />
@@ -540,19 +665,19 @@ const DoctorDashboard = () => {
         </Card>
       </div>
 
-      {/* ─── Today's Appointments ─── */}
-      {todayAppointments.length > 0 && (
+      {/* ─── Accepted Appointments ─── */}
+      {acceptedAppointments.length > 0 && (
         <Card className="bg-white border-2 border-sky-300 rounded-2xl shadow-md hover:shadow-lg transition-shadow">
           <CardHeader className="pb-3 bg-gradient-to-r from-sky-50 to-cyan-50">
             <CardTitle className="flex items-center gap-2 text-slate-900">
               <CalendarDays className="h-5 w-5 text-sky-600" />
-              Today's Appointments
-              <Badge className="bg-sky-500 text-white">{todayAppointments.length} today</Badge>
+              Accepted Appointments
+              <Badge className="bg-sky-500 text-white">{acceptedAppointments.length} accepted</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {todayAppointments.map((apt) => {
+              {acceptedAppointments.map((apt) => {
                 const status = normalizedStatus(apt.status);
                 const canJoin = ["accepted", "in-progress", "in progress"].includes(status);
                 
@@ -583,7 +708,7 @@ const DoctorDashboard = () => {
                         <Button
                           size="sm"
                           className="gap-1.5 bg-sky-500 hover:bg-sky-600 text-white shadow-md transition-all duration-200 hover:scale-105"
-                          onClick={() => navigate(`/video/${apt._id}`)}
+                          onClick={() => handleJoinCallFromDashboard(apt)}
                         >
                           <Video className="h-4 w-4" /> Join Call
                         </Button>
@@ -708,7 +833,7 @@ const DoctorDashboard = () => {
                       <Button
                         size="sm"
                         className="gap-1 bg-sky-500 hover:bg-sky-600 text-white shadow-sm transition-all duration-200 hover:scale-105"
-                        onClick={() => handleStartConsultation(apt._id)}
+                        onClick={() => handleJoinCallFromDashboard(apt)}
                       >
                         <Video className="h-3.5 w-3.5" /> Join
                       </Button>
@@ -717,7 +842,7 @@ const DoctorDashboard = () => {
                       <Button
                         size="sm"
                         className="gap-1 bg-sky-500 hover:bg-sky-600 text-white shadow-sm transition-all duration-200 hover:scale-105"
-                        onClick={() => navigate(`/video/${apt._id}`)}
+                        onClick={() => handleJoinCallFromDashboard(apt)}
                       >
                         <Video className="h-3.5 w-3.5" /> Join
                       </Button>
@@ -746,9 +871,10 @@ const DoctorDashboard = () => {
             ) : (
               <div className="space-y-2">
                 {[...completedAppointments].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map((apt) => {
-                  const rx = getPrescriptionByAppointment?.(apt._id || apt.id);
+                  const appointmentId = apt._id || apt.id;
+                  const rx = getPrescriptionByAppointment?.(appointmentId);
                   return (
-                    <div key={apt._id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div key={appointmentId} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <div className="flex items-center gap-3">
                         <CheckCircle className="h-5 w-5 text-sky-500 shrink-0" />
                         <div>
@@ -759,16 +885,32 @@ const DoctorDashboard = () => {
                       <div className="flex gap-2">
                         {rx && (
                           <Button size="sm" variant="ghost" className="text-xs text-slate-600 transition-all duration-200 hover:scale-105"
-                            onClick={() => navigate(rx?._id ? `/prescriptions/${rx._id}` : `/prescriptions/appointment/${apt._id}`)}>View Rx</Button>
+                            onClick={() => navigate(rx?._id ? `/prescriptions/${rx._id}` : `/prescriptions/appointment/${appointmentId}`)}>View Rx</Button>
                         )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1 border-slate-300 text-slate-700 hover:bg-slate-50 transition-all duration-200 hover:scale-105"
-                          onClick={() => navigate(`/create-prescription/${apt._id}`)}
-                        >
-                          <FileText className="h-3.5 w-3.5" /> {rx ? "Edit Prescription" : "Write Prescription"}
-                        </Button>
+                        {rx?.status === "draft" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 border-slate-300 text-slate-700 hover:bg-slate-50 transition-all duration-200 hover:scale-105"
+                            onClick={() => navigate(`/create-prescription/${appointmentId}`)}
+                          >
+                            <FileText className="h-3.5 w-3.5" /> Continue Draft
+                          </Button>
+                        ) : !rx ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 border-slate-300 text-slate-700 hover:bg-slate-50 transition-all duration-200 hover:scale-105"
+                            onClick={() => navigate(`/create-prescription/${appointmentId}`)}
+                          >
+                            <FileText className="h-3.5 w-3.5" /> Write Prescription
+                          </Button>
+                        ) : (
+                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border ${getRxStatusStyles(rx.status)}`}>
+                            <FileText className="h-3.5 w-3.5" />
+                            <span className="text-xs font-medium">{getRxStatusLabel(rx.status)}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

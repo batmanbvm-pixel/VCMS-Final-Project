@@ -19,8 +19,13 @@ const corsOptions = {
     ].filter(Boolean);
 
     // Allow requests with no origin (like mobile apps or curl requests)
-    // Also allow any localhost port in development
-    if (!origin || allowedOrigins.includes(origin) || /^http:\/\/localhost:\d+$/.test(origin)) {
+    // Also allow localhost/127.0.0.1 with http or https in development
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      /^https?:\/\/localhost:\d+$/.test(origin) ||
+      /^https?:\/\/127\.0\.0\.1:\d+$/.test(origin)
+    ) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));
@@ -93,7 +98,7 @@ const securityHeaders = (req, res, next) => {
   // Feature Policy / Permissions Policy
   res.setHeader(
     "Permissions-Policy",
-    "geolocation=(), microphone=(), camera=()"
+    "geolocation=(), microphone=(self), camera=(self)"
   );
 
   // Remove powered by header

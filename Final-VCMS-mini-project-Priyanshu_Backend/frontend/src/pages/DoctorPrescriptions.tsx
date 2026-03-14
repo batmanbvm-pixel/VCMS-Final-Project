@@ -25,7 +25,7 @@ interface Prescription {
   }>;
   diagnosis: string;
   clinicalNotes?: string;
-  status: "draft" | "issued";
+  status: "draft" | "issued" | "viewed" | "picked_up" | "cancelled";
   createdAt: string;
   validUntil: string;
 }
@@ -39,6 +39,9 @@ export const DoctorPrescriptions = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'draft' | 'issued'>('all');
+
+  const normalizeRxStatus = (status?: string) => String(status || "draft").toLowerCase();
+  const isIssuedLikeStatus = (status?: string) => ["issued", "viewed", "picked_up"].includes(normalizeRxStatus(status));
 
   useEffect(() => {
     fetchPrescriptions();
@@ -84,15 +87,25 @@ export const DoctorPrescriptions = () => {
     const matchesSearch = patientName.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (activeFilter === 'all') return matchesSearch;
-    if (activeFilter === 'draft') return matchesSearch && rx.status === 'draft';
-    if (activeFilter === 'issued') return matchesSearch && rx.status === 'issued';
+    if (activeFilter === 'draft') return matchesSearch && normalizeRxStatus(rx.status) === 'draft';
+    if (activeFilter === 'issued') return matchesSearch && isIssuedLikeStatus(rx.status);
     return matchesSearch;
   });
 
   const stats = {
     total: prescriptions.length,
-    draft: prescriptions.filter((r) => r.status === "draft").length,
-    issued: prescriptions.filter((r) => r.status === "issued").length,
+    draft: prescriptions.filter((r) => normalizeRxStatus(r.status) === "draft").length,
+    issued: prescriptions.filter((r) => isIssuedLikeStatus(r.status)).length,
+  };
+
+  const getStatusBadge = (status?: string) => {
+    const normalized = normalizeRxStatus(status);
+    if (normalized === 'draft') return { text: '✎ Draft', classes: 'bg-amber-100 text-amber-700' };
+    if (normalized === 'issued') return { text: '✓ Issued', classes: 'bg-emerald-100 text-emerald-700' };
+    if (normalized === 'viewed') return { text: '👁 Viewed', classes: 'bg-sky-100 text-sky-700' };
+    if (normalized === 'picked_up') return { text: '📦 Picked Up', classes: 'bg-violet-100 text-violet-700' };
+    if (normalized === 'cancelled') return { text: '✕ Cancelled', classes: 'bg-red-100 text-red-700' };
+    return { text: '—', classes: 'bg-slate-100 text-slate-700' };
   };
 
   return (
@@ -104,7 +117,7 @@ export const DoctorPrescriptions = () => {
             <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
               <Pill className="h-7 w-7" /> My Prescriptions
             </h1>
-            <p className="mt-2 text-white/90 text-sm">Total: {stats.total} • Draft: {stats.draft} • Issued: {stats.issued}</p>
+            <p className="mt-2 text-white/90 text-sm">Total: {stats.total} • Draft: {stats.draft} • Issued+: {stats.issued}</p>
           </div>
           <Button 
             variant="outline" 
@@ -157,7 +170,7 @@ export const DoctorPrescriptions = () => {
               }`}
             >
               <FileText className="h-4 w-4 mr-2" />
-              Issued ({stats.issued})
+              Issued+ ({stats.issued})
             </Button>
           </div>
         </CardContent>
@@ -207,7 +220,9 @@ export const DoctorPrescriptions = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPrescriptions.map((rx) => (
+                  {filteredPrescriptions.map((rx) => {
+                    const statusBadge = getStatusBadge(rx.status);
+                    return (
                     <TableRow key={rx._id} className="hover:bg-slate-50/60">
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -239,12 +254,8 @@ export const DoctorPrescriptions = () => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          rx.status === 'issued'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-amber-100 text-amber-700'
-                        }`}>
-                          {rx.status === 'issued' ? '✓ Issued' : '✎ Draft'}
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusBadge.classes}`}>
+                          {statusBadge.text}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
@@ -270,7 +281,7 @@ export const DoctorPrescriptions = () => {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             </div>

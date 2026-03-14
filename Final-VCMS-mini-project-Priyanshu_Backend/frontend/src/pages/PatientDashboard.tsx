@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClinic } from "@/contexts/ClinicContext";
 import { useSocket } from "@/hooks/useSocket";
@@ -47,6 +47,7 @@ import {
 import { formatLocation } from "@/utils/formatLocation";
 import { format } from "date-fns";
 import DoctorCard from "@/components/DoctorCard";
+import RateButton from "@/components/RateButton";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -109,6 +110,110 @@ const specializationMatches = (doctorSpecialization: string, requiredSpecializat
   return aliases.some((alias) => docSpec.includes(normalizeText(alias)) || normalizeText(alias).includes(docSpec));
 };
 
+type FamilyRiskAnswer = "yes" | "no" | "unknown";
+type FamilyRiskDiseaseKey =
+  | "cancer"
+  | "heart-disease"
+  | "diabetes"
+  | "stroke"
+  | "hypertension"
+  | "asthma"
+  | "kidney-disease";
+
+type FamilyRiskQuestion = {
+  key: string;
+  label: string;
+  weight: number;
+};
+
+type ActiveFamilyRiskQuestion = FamilyRiskQuestion & {
+  id: string;
+  diseaseKey: FamilyRiskDiseaseKey;
+  diseaseLabel: string;
+};
+
+const FAMILY_RISK_DISEASES: { key: FamilyRiskDiseaseKey; label: string; helper: string }[] = [
+  { key: "cancer", label: "Cancer", helper: "Family cancer pattern" },
+  { key: "heart-disease", label: "Heart Disease", helper: "Cardiac family risk" },
+  { key: "diabetes", label: "Diabetes", helper: "Sugar/metabolic trend" },
+  { key: "stroke", label: "Stroke", helper: "Neuro-vascular family trend" },
+  { key: "hypertension", label: "Hypertension", helper: "Blood pressure tendency" },
+  { key: "asthma", label: "Asthma", helper: "Respiratory allergy pattern" },
+  { key: "kidney-disease", label: "Kidney Disease", helper: "Renal family risk" },
+];
+
+const FAMILY_RISK_QUESTIONS: Record<FamilyRiskDiseaseKey, FamilyRiskQuestion[]> = {
+  "cancer": [
+    { key: "father", label: "Father diagnosed with cancer", weight: 22 },
+    { key: "mother", label: "Mother diagnosed with cancer", weight: 22 },
+    { key: "grandfather", label: "Any grandfather diagnosed with cancer", weight: 16 },
+    { key: "grandmother", label: "Any grandmother diagnosed with cancer", weight: 14 },
+    { key: "sibling", label: "Brother/Sister diagnosed with cancer", weight: 20 },
+    { key: "lifestyle", label: "High-risk lifestyle factors present (tobacco, alcohol, inactivity)", weight: 10 },
+    { key: "screening", label: "No regular preventive screening done", weight: 8 },
+  ],
+  "heart-disease": [
+    { key: "father", label: "Father diagnosed with heart disease", weight: 24 },
+    { key: "mother", label: "Mother diagnosed with heart disease", weight: 24 },
+    { key: "grandfather", label: "Any grandfather had heart attack/stroke", weight: 14 },
+    { key: "grandmother", label: "Any grandmother had heart disease", weight: 12 },
+    { key: "sibling", label: "Brother/Sister diagnosed with heart disease", weight: 16 },
+    { key: "bp", label: "You have high BP/high cholesterol", weight: 12 },
+    { key: "activity", label: "Low physical activity/regular smoking", weight: 10 },
+  ],
+  "diabetes": [
+    { key: "father", label: "Father diagnosed with diabetes", weight: 24 },
+    { key: "mother", label: "Mother diagnosed with diabetes", weight: 24 },
+    { key: "grandfather", label: "Any grandfather diagnosed with diabetes", weight: 14 },
+    { key: "grandmother", label: "Any grandmother diagnosed with diabetes", weight: 14 },
+    { key: "sibling", label: "Brother/Sister diagnosed with diabetes", weight: 16 },
+    { key: "weight", label: "Overweight or central obesity", weight: 10 },
+    { key: "activity", label: "Low activity and high-sugar diet", weight: 8 },
+  ],
+  "stroke": [
+    { key: "father", label: "Father had stroke/TIA", weight: 22 },
+    { key: "mother", label: "Mother had stroke/TIA", weight: 22 },
+    { key: "grandfather", label: "Any grandfather had stroke", weight: 14 },
+    { key: "grandmother", label: "Any grandmother had stroke", weight: 14 },
+    { key: "sibling", label: "Brother/Sister had stroke", weight: 16 },
+    { key: "bp", label: "You have high BP/atrial fibrillation", weight: 14 },
+    { key: "smoking", label: "Smoking/alcohol/sedentary routine", weight: 10 },
+  ],
+  "hypertension": [
+    { key: "father", label: "Father diagnosed with high BP", weight: 24 },
+    { key: "mother", label: "Mother diagnosed with high BP", weight: 24 },
+    { key: "grandfather", label: "Any grandfather had high BP", weight: 14 },
+    { key: "grandmother", label: "Any grandmother had high BP", weight: 14 },
+    { key: "sibling", label: "Brother/Sister diagnosed with high BP", weight: 14 },
+    { key: "salt", label: "High salt diet and stress", weight: 10 },
+    { key: "activity", label: "Low daily physical activity", weight: 10 },
+  ],
+  "asthma": [
+    { key: "father", label: "Father has asthma/allergic airway disease", weight: 20 },
+    { key: "mother", label: "Mother has asthma/allergic airway disease", weight: 20 },
+    { key: "grandparent", label: "Any grandparent had asthma/allergies", weight: 16 },
+    { key: "sibling", label: "Brother/Sister has asthma", weight: 18 },
+    { key: "allergy", label: "You have chronic allergy/sinus symptoms", weight: 14 },
+    { key: "smoke", label: "Exposure to smoke/pollution at home/work", weight: 12 },
+    { key: "pet", label: "Frequent trigger exposure (dust, pet dander)", weight: 10 },
+  ],
+  "kidney-disease": [
+    { key: "father", label: "Father diagnosed with kidney disease", weight: 22 },
+    { key: "mother", label: "Mother diagnosed with kidney disease", weight: 22 },
+    { key: "grandparent", label: "Any grandparent had kidney disease", weight: 14 },
+    { key: "sibling", label: "Brother/Sister diagnosed with kidney disease", weight: 16 },
+    { key: "diabetes", label: "You have diabetes/pre-diabetes", weight: 14 },
+    { key: "bp", label: "You have long-term high BP", weight: 12 },
+    { key: "hydration", label: "Poor hydration/high painkiller use", weight: 10 },
+  ],
+};
+
+const RISK_OPTION_LABELS: { key: FamilyRiskAnswer; label: string }[] = [
+  { key: "yes", label: "Yes" },
+  { key: "no", label: "No" },
+  { key: "unknown", label: "Not Sure" },
+];
+
 const PatientDashboard = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -143,7 +248,7 @@ const PatientDashboard = () => {
   const [bookTime, setBookTime] = useState("");
 
   // Appointments tab
-  const [appointmentTab, setAppointmentTab] = useState<"all" | "upcoming" | "past" | "cancelled">("all");
+  const [appointmentTab, setAppointmentTab] = useState<"all" | "accepted" | "upcoming" | "past" | "cancelled">("all");
 
   // Cancel confirmation dialog
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -154,18 +259,116 @@ const PatientDashboard = () => {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [showFamilyRiskDialog, setShowFamilyRiskDialog] = useState(false);
+  const [refreshingAppointments, setRefreshingAppointments] = useState(false);
+  const [doctorWaitingByAppointment, setDoctorWaitingByAppointment] = useState<Record<string, { doctorName: string; updatedAt: number }>>({});
+  const waitingToastRef = useRef<Set<string>>(new Set());
+  const waitingStorageKey = useMemo(() => `doctor_waiting_${user?._id || "guest"}`, [user?._id]);
+
+  const persistDoctorWaiting = useCallback((value: Record<string, { doctorName: string; updatedAt: number }>) => {
+    if (!user?._id) return;
+    try {
+      localStorage.setItem(waitingStorageKey, JSON.stringify(value));
+    } catch {
+      // ignore storage write errors
+    }
+  }, [user?._id, waitingStorageKey]);
+
+  // Family Health Tree (frontend-only risk estimator)
+  const [selectedRiskDiseases, setSelectedRiskDiseases] = useState<FamilyRiskDiseaseKey[]>(["cancer"]);
+  const [familyRiskAnswers, setFamilyRiskAnswers] = useState<Record<string, FamilyRiskAnswer>>({});
 
   // My appointments filtered
   const myAppointments = appointments.filter((a) => a.patientId === user?._id);
+  const todayDate = new Date().toISOString().split("T")[0];
+  const normalizeStatus = (status?: string) => String(status || "").toLowerCase();
+  const isJoinEnabledStatus = (status?: string) => ["accepted", "in progress", "in-progress"].includes(normalizeStatus(status));
+  const isBookedStatus = (status?: string) => normalizeStatus(status) === "booked";
+
   const allAppointments = myAppointments;
-  const upcomingAppointments = myAppointments.filter((a) => ["Booked", "Accepted", "In Progress"].includes(a.status));
+  const acceptedAppointments = myAppointments.filter((a) => isJoinEnabledStatus(a.status));
+  const upcomingAppointments = myAppointments.filter((a) => a.date > todayDate && isBookedStatus(a.status));
   const pastAppointments = myAppointments.filter((a) => a.status === "Completed");
   const cancelledAppointments = myAppointments.filter((a) => a.status === "Cancelled");
+  const currentTabAppointments = appointmentTab === "all"
+    ? allAppointments
+    : appointmentTab === "accepted"
+      ? acceptedAppointments
+    : appointmentTab === "upcoming"
+      ? upcomingAppointments
+      : appointmentTab === "past"
+        ? pastAppointments
+        : cancelledAppointments;
+  const APPOINTMENTS_PREVIEW_LIMIT = 6;
+  const previewAppointments = currentTabAppointments.slice(0, APPOINTMENTS_PREVIEW_LIMIT);
+  const doctorWaitingAppointmentIds = Object.keys(doctorWaitingByAppointment).filter((id) => !!doctorWaitingByAppointment[id]);
+  const doctorWaitingCount = doctorWaitingAppointmentIds.length;
+  const firstWaitingAppointmentId = doctorWaitingAppointmentIds[0] || "";
+  const waitingDoctorPrimaryName = doctorWaitingByAppointment[firstWaitingAppointmentId]?.doctorName || "Doctor";
+  const acceptedAppointmentIdSet = new Set(acceptedAppointments.map((apt: any) => String(apt._id || apt.id || "")).filter(Boolean));
+  const combinedAppointmentAttentionCount = new Set([
+    ...Array.from(acceptedAppointmentIdSet),
+    ...doctorWaitingAppointmentIds,
+  ]).size;
 
   // Auto-fetch appointments on mount
   useEffect(() => {
     fetchAppointments();
   }, []);
+
+  // Restore live waiting signals after refresh (source of truth = socket waiting events)
+  useEffect(() => {
+    if (!user?._id) return;
+    try {
+      const raw = localStorage.getItem(waitingStorageKey);
+      const parsed = raw ? JSON.parse(raw) : {};
+      if (parsed && typeof parsed === "object") {
+        const now = Date.now();
+        const maxAgeMs = 2 * 60 * 60 * 1000; // 2 hours
+        const filtered: Record<string, { doctorName: string; updatedAt: number }> = {};
+        Object.entries(parsed as Record<string, { doctorName?: string; updatedAt?: number }>).forEach(([appointmentId, value]) => {
+          const updatedAt = Number(value?.updatedAt || 0);
+          if (updatedAt > 0 && now - updatedAt <= maxAgeMs) {
+            filtered[appointmentId] = {
+              doctorName: String(value?.doctorName || "Doctor"),
+              updatedAt,
+            };
+          }
+        });
+
+        setDoctorWaitingByAppointment(filtered);
+        waitingToastRef.current = new Set(Object.keys(filtered));
+        persistDoctorWaiting(filtered);
+      }
+    } catch {
+      // ignore storage read errors
+    }
+  }, [user?._id, waitingStorageKey, persistDoctorWaiting]);
+
+  // Remove stale waiting entries when appointment is completed/cancelled/rejected
+  useEffect(() => {
+    setDoctorWaitingByAppointment((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      Object.keys(next).forEach((appointmentId) => {
+        const apt = myAppointments.find((a: any) => String(a._id || a.id || "") === appointmentId);
+        if (!apt) {
+          delete next[appointmentId];
+          waitingToastRef.current.delete(appointmentId);
+          changed = true;
+          return;
+        }
+        const status = String(apt.status || "").toLowerCase();
+        if (["completed", "cancelled", "rejected"].includes(status)) {
+          delete next[appointmentId];
+          waitingToastRef.current.delete(appointmentId);
+          changed = true;
+        }
+      });
+      if (changed) persistDoctorWaiting(next);
+      return changed ? next : prev;
+    });
+  }, [myAppointments, persistDoctorWaiting]);
 
   // Real-time socket updates for appointments
   useEffect(() => {
@@ -173,12 +376,25 @@ const PatientDashboard = () => {
 
     const handleStatusChanged = (data: any) => {
       fetchAppointments(); // Refresh appointments list
+
+      const appointmentId = String(data?.appointmentId || "");
+      const normalizedIncomingStatus = String(data?.status || "").toLowerCase();
+      if (appointmentId && ["completed", "cancelled", "rejected"].includes(normalizedIncomingStatus)) {
+        setDoctorWaitingByAppointment((prev) => {
+          if (!prev[appointmentId]) return prev;
+          const next = { ...prev };
+          delete next[appointmentId];
+          persistDoctorWaiting(next);
+          return next;
+        });
+        waitingToastRef.current.delete(appointmentId);
+      }
       
       // Show toast notification for important status changes
       if (data.status === "accepted" || data.status === "Accepted") {
         toast({
           title: "Appointment Accepted!",
-          description: "Doctor has accepted your appointment. You can now join video call.",
+          description: "Doctor has accepted your appointment. Please wait for doctor to start the consultation.",
         });
       } else if (data.status === "in-progress" || data.status === "In Progress") {
         toast({
@@ -197,18 +413,67 @@ const PatientDashboard = () => {
       fetchAppointments();
     };
 
+    const handleVideoWaitingStatus = (data: any) => {
+      const appointmentId = String(data?.appointmentId || "");
+      if (!appointmentId) return;
+
+      const role = String(data?.role || "").toLowerCase();
+      const waiting = !!data?.waiting;
+
+      // Patient dashboard only reacts to doctor waiting signal
+      if (role !== "doctor") return;
+
+      const fallbackDoctorName = myAppointments.find((apt: any) => String(apt._id || apt.id || "") === appointmentId)?.doctorName;
+      const doctorName = String(data?.fromName || data?.doctorName || fallbackDoctorName || "Doctor");
+
+      setDoctorWaitingByAppointment((prev) => {
+        if (waiting) {
+          const next = {
+            ...prev,
+            [appointmentId]: {
+              doctorName,
+              updatedAt: Date.now(),
+            },
+          };
+          persistDoctorWaiting(next);
+          return next;
+        }
+        if (!prev[appointmentId]) return prev;
+        const next = { ...prev };
+        delete next[appointmentId];
+        persistDoctorWaiting(next);
+        return next;
+      });
+
+      if (waiting && !waitingToastRef.current.has(appointmentId)) {
+        waitingToastRef.current.add(appointmentId);
+        toast({
+          title: "Doctor is waiting",
+          description: `${doctorDisplayName(doctorName)} started the video call. Join now.`,
+        });
+      }
+
+      if (!waiting) {
+        waitingToastRef.current.delete(appointmentId);
+      }
+    };
+
     socket.on("appointment-status-changed", handleStatusChanged);
+    socket.on("appointment:status-changed", handleStatusChanged);
     socket.on("appointment:updated", handleAppointmentUpdate);
     socket.on("appointment:accepted", handleAppointmentUpdate);
     socket.on("appointment:rejected", handleAppointmentUpdate);
+    socket.on("video:waiting-status", handleVideoWaitingStatus);
 
     return () => {
       socket.off("appointment-status-changed", handleStatusChanged);
+      socket.off("appointment:status-changed", handleStatusChanged);
       socket.off("appointment:updated", handleAppointmentUpdate);
       socket.off("appointment:accepted", handleAppointmentUpdate);
       socket.off("appointment:rejected", handleAppointmentUpdate);
+      socket.off("video:waiting-status", handleVideoWaitingStatus);
     };
-  }, [socket, user, fetchAppointments, toast]);
+  }, [socket, user, fetchAppointments, toast, myAppointments, persistDoctorWaiting]);
 
   const loadDoctors = useCallback(async (showErrorToast = true) => {
     setLoadingDoctors(true);
@@ -240,6 +505,29 @@ const PatientDashboard = () => {
       setLoadingDoctors(false);
     }
   }, [toast]);
+
+  const handleAppointmentsRefresh = async () => {
+    if (refreshingAppointments) return;
+    setRefreshingAppointments(true);
+    try {
+      await Promise.all([
+        loadDoctors(false),
+        Promise.resolve(fetchAppointments()),
+      ]);
+      toast({
+        title: "Refreshed",
+        description: "Appointments and doctors list updated.",
+      });
+    } catch (error) {
+      toast({
+        title: "Refresh failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshingAppointments(false);
+    }
+  };
 
   // Fetch doctors and specializations on mount + auto-refresh every 20 seconds
   useEffect(() => {
@@ -604,6 +892,111 @@ const PatientDashboard = () => {
     return `Dr. ${cleaned}`;
   };
 
+  const activeRiskQuestions = useMemo<ActiveFamilyRiskQuestion[]>(() => {
+    return selectedRiskDiseases.flatMap((diseaseKey) => {
+      const diseaseMeta = FAMILY_RISK_DISEASES.find((d) => d.key === diseaseKey);
+      const diseaseLabel = diseaseMeta?.label || diseaseKey;
+
+      return (FAMILY_RISK_QUESTIONS[diseaseKey] || []).map((q) => ({
+        ...q,
+        id: `${diseaseKey}:${q.key}`,
+        diseaseKey,
+        diseaseLabel,
+      }));
+    });
+  }, [selectedRiskDiseases]);
+
+  useEffect(() => {
+    setFamilyRiskAnswers((prev) => {
+      const next: Record<string, FamilyRiskAnswer> = {};
+      activeRiskQuestions.forEach((q) => {
+        next[q.id] = prev[q.id] || "unknown";
+      });
+      return next;
+    });
+  }, [activeRiskQuestions]);
+
+  const updateFamilyRiskAnswer = (questionId: string, answer: FamilyRiskAnswer) => {
+    setFamilyRiskAnswers((prev) => ({ ...prev, [questionId]: answer }));
+  };
+
+  const toggleRiskDisease = (diseaseKey: FamilyRiskDiseaseKey) => {
+    setSelectedRiskDiseases((prev) =>
+      prev.includes(diseaseKey)
+        ? prev.filter((key) => key !== diseaseKey)
+        : [...prev, diseaseKey]
+    );
+  };
+
+  const familyRiskResult = useMemo(() => {
+    if (activeRiskQuestions.length === 0) {
+      return {
+        percent: 0,
+        level: "Select Disease",
+        chipClass: "bg-slate-100 text-slate-700 border-slate-200",
+        barClass: "from-slate-300 to-slate-400",
+        summary: "Select one or more diseases to start family risk prediction.",
+      };
+    }
+
+    const totalWeight = activeRiskQuestions.reduce((sum, q) => sum + q.weight, 0);
+
+    let rawScore = activeRiskQuestions.reduce((sum, q) => {
+      const answer = familyRiskAnswers[q.id] || "unknown";
+      if (answer === "yes") return sum + q.weight;
+      if (answer === "unknown") return sum + q.weight * 0.35;
+      return sum;
+    }, 0);
+
+    const hasYesFor = (suffix: string) =>
+      Object.entries(familyRiskAnswers).some(([id, ans]) => id.endsWith(`:${suffix}`) && ans === "yes");
+
+    const fatherYes = hasYesFor("father");
+    const motherYes = hasYesFor("mother");
+    const siblingYes = hasYesFor("sibling");
+    if (fatherYes && motherYes) rawScore += 10;
+    if (siblingYes && (fatherYes || motherYes)) rawScore += 6;
+
+    const riskPercent = Math.max(5, Math.min(95, Math.round((rawScore / Math.max(totalWeight, 1)) * 100)));
+
+    if (riskPercent >= 70) {
+      return {
+        percent: riskPercent,
+        level: "High",
+        chipClass: "bg-sky-100 text-sky-800 border-sky-200",
+        barClass: "from-sky-700 to-sky-500",
+        summary: "Higher family-linked risk detected. Please discuss screening with a healthcare professional.",
+      };
+    }
+
+    if (riskPercent >= 40) {
+      return {
+        percent: riskPercent,
+        level: "Moderate",
+        chipClass: "bg-sky-50 text-sky-700 border-sky-200",
+        barClass: "from-sky-600 to-sky-500",
+        summary: "Moderate family trend. Early lifestyle changes and routine checkups are recommended.",
+      };
+    }
+
+    return {
+      percent: riskPercent,
+      level: "Low",
+      chipClass: "bg-sky-50 text-sky-700 border-sky-200",
+      barClass: "from-sky-500 to-sky-400",
+      summary: "Currently lower family-linked risk, but continue preventive care and periodic health checks.",
+    };
+  }, [activeRiskQuestions, familyRiskAnswers]);
+
+  const resetFamilyRiskForm = () => {
+    setFamilyRiskAnswers(
+      activeRiskQuestions.reduce((acc, q) => {
+        acc[q.id] = "unknown";
+        return acc;
+      }, {} as Record<string, FamilyRiskAnswer>)
+    );
+  };
+
   const statCards = [
     {
       label: "Upcoming",
@@ -636,37 +1029,106 @@ const PatientDashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-slate-50/50 to-sky-50/30">
+    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-sky-50 to-blue-50">
       <div className="container mx-auto px-6 py-8 space-y-6 max-w-7xl pb-12">
 
       {/* ── Hero Header ─────────────────────────────────────────────── */}
-      <div className="rounded-xl overflow-hidden bg-sky-500 border border-sky-300 shadow-md text-white">
+      <div className="rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-sm">
         <div className="px-6 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="space-y-2">
-            <p className="text-[11px] font-bold text-white/90 uppercase tracking-widest flex items-center gap-2">
-              <UserRound className="h-4 w-4" /> Patient Portal
+          <div>
+            <p className="text-[11px] font-bold text-sky-600 uppercase tracking-widest mb-1">Patient Portal</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">{user?.name || "Patient"}</h1>
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 px-2.5 py-1 text-xs font-semibold">
+                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                Patient
+              </span>
+            </div>
+            <p className="text-slate-600 text-sm mt-1">
+              {new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
             </p>
-            <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Welcome, {user?.name || "Patient"}</h1>
-            <p className="text-sky-100 text-sm">Book appointments, view records, and stay on top of your health journey.</p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 text-white border border-white/30 px-3 py-1 text-xs font-semibold">
+            <p className="text-slate-600 text-sm mt-1">Book appointments, view records, and stay on top of your health journey.</p>
+
+            <div className="flex flex-wrap gap-2 mt-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 text-sky-700 border border-sky-200 px-3 py-1 text-xs font-semibold">
                 <Sparkles className="h-3.5 w-3.5" /> Personalized Care
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 text-white border border-white/30 px-3 py-1 text-xs font-semibold">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 text-sky-700 border border-sky-200 px-3 py-1 text-xs font-semibold">
                 <CheckCircle className="h-3.5 w-3.5" /> Health Records Ready
               </span>
             </div>
           </div>
-          <div className="flex gap-2 flex-wrap">
+
+          <div className="flex gap-2 flex-wrap self-start lg:self-center">
             <button
               onClick={() => navigate("/patient/appointments")}
-              className="flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all shadow-sm"
+              className={`relative flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all duration-200 hover:scale-105 ${
+                doctorWaitingCount > 0
+                  ? "border-l-4 border-l-emerald-500"
+                  : ""
+              } ${
+                acceptedAppointments.length > 0 || doctorWaitingCount > 0
+                  ? "shadow-[0_0_0_2px_rgba(56,189,248,0.35),0_0_22px_rgba(14,165,233,0.45)]"
+                  : "shadow-sm"
+              }`}
             >
-              <CalendarDays className="h-4 w-4" /> My Appointments
+              {(acceptedAppointments.length > 0 || doctorWaitingCount > 0) && (
+                <span
+                  aria-hidden
+                  className="absolute inset-0 rounded-xl bg-sky-300/25 blur-md animate-pulse"
+                />
+              )}
+              <span className="relative z-10 inline-flex items-center gap-2">
+                <CalendarDays className="h-4 w-4" /> My Appointments
+              </span>
+              {(acceptedAppointments.length > 0 || doctorWaitingCount > 0) && (
+                <>
+                  <span
+                    aria-hidden
+                    className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-emerald-400 opacity-75 animate-ping z-10"
+                  />
+                  <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-sm z-20">
+                    {combinedAppointmentAttentionCount > 99 ? "99+" : combinedAppointmentAttentionCount}
+                  </span>
+                </>
+              )}
             </button>
           </div>
         </div>
       </div>
+
+      {doctorWaitingCount > 0 && (
+        <div className="w-full">
+          <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white shadow-md">
+            <CardContent className="px-6 py-5 text-center space-y-4">
+              <div className="mx-auto h-14 w-14 rounded-full bg-emerald-100 flex items-center justify-center">
+                <Video className="h-7 w-7 text-emerald-600" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-base font-bold text-emerald-700">
+                  {doctorDisplayName(waitingDoctorPrimaryName)} started the video call.
+                </p>
+                <p className="text-sm text-emerald-600">
+                  {doctorWaitingCount > 1
+                    ? `${doctorWaitingCount} consultations are live. Choose one to join now.`
+                    : "Your doctor is waiting in the consultation room."}
+                </p>
+              </div>
+              <div className="flex justify-center">
+                <Button
+                  size="sm"
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white px-5"
+                  onClick={() => {
+                    if (firstWaitingAppointmentId) navigate(`/video/${firstWaitingAppointmentId}`);
+                  }}
+                >
+                  <Video className="h-4 w-4 mr-1.5" /> Join Video Call
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -686,16 +1148,13 @@ const PatientDashboard = () => {
       </div>
 
       {/* ── Quick Access Cards ───────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {[
           { 
             icon: ClipboardList, 
             title: "Medical History", 
             desc: "View your complete medical timeline",
             badge: "Track Records",
-            gradient: "from-emerald-500 to-teal-600",
-            accentGradient: "from-emerald-500 to-teal-600",
-            bgGradient: "from-emerald-50 to-teal-50",
             path: "/patient/medical-history" 
           },
           { 
@@ -703,9 +1162,6 @@ const PatientDashboard = () => {
             title: "AI Report Analyzer", 
             desc: "Get AI-powered insights from reports",
             badge: "Smart Analysis",
-            gradient: "from-violet-500 to-fuchsia-600",
-            accentGradient: "from-violet-500 to-fuchsia-600",
-            bgGradient: "from-violet-50 to-fuchsia-50",
             path: "/patient/ai-analyzer" 
           },
           { 
@@ -713,31 +1169,22 @@ const PatientDashboard = () => {
             title: "My Prescriptions", 
             desc: "Access prescriptions with AI summaries",
             badge: "Smart Rx",
-            gradient: "from-sky-500 to-cyan-600",
-            accentGradient: "from-sky-500 to-cyan-600",
-            bgGradient: "from-sky-50 to-cyan-50",
             path: "/patient/prescriptions" 
           },
-        ].map(({ icon: Icon, title, desc, badge, gradient, accentGradient, bgGradient, path }) => (
+        ].map(({ icon: Icon, title, desc, badge, path }) => (
           <button
             key={path}
             onClick={() => navigate(path)}
-            className="group relative overflow-hidden rounded-lg border-2 border-slate-100 bg-white shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-slate-200"
+            className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-lg hover:border-sky-300 hover:scale-105 transition-all duration-300"
           >
-            {/* Bottom Accent Bar */}
-            <div className={`absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r ${accentGradient} transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left`} />
-            
-            {/* Background Glow on Hover */}
-            <div className={`absolute -inset-0.5 bg-gradient-to-br ${bgGradient} opacity-0 group-hover:opacity-30 transition-opacity duration-300 blur-lg pointer-events-none`} />
-            
             {/* Content */}
-            <div className="relative p-4 space-y-2.5">
+            <div className="relative p-5 space-y-3 h-full flex flex-col">
               {/* Icon and Badge Row */}
               <div className="flex items-start justify-between gap-2">
-                <div className={`h-12 w-12 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md transform group-hover:scale-105 transition-transform duration-300`}>
-                  <Icon className="h-5.5 w-5.5 text-white" />
+                <div className="h-10 w-10 rounded-xl bg-sky-100 flex items-center justify-center">
+                  <Icon className="h-5.5 w-5.5 text-sky-600" />
                 </div>
-                <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 group-hover:bg-slate-200 transition-colors whitespace-nowrap flex-shrink-0">
+                <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100 whitespace-nowrap flex-shrink-0">
                   {badge}
                 </span>
               </div>
@@ -748,16 +1195,43 @@ const PatientDashboard = () => {
               </div>
               
               {/* Description */}
-              <p className="text-xs text-slate-600 leading-tight line-clamp-2">{desc}</p>
+              <p className="text-xs text-slate-600 leading-tight line-clamp-2 flex-1">{desc}</p>
               
               {/* CTA Button */}
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-white bg-gradient-to-r from-sky-500 to-sky-600 group-hover:from-sky-600 group-hover:to-sky-700 px-2.5 py-1 rounded-lg transition-all w-full mt-1 justify-center">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-white bg-sky-500 group-hover:bg-sky-600 px-2.5 py-1.5 rounded-xl transition-all w-full mt-1 justify-center">
                 <span>Open</span>
                 <ChevronRight className="h-3 w-3 transform group-hover:translate-x-0.5 transition-transform" />
               </div>
             </div>
           </button>
         ))}
+
+        <button
+          onClick={() => setShowFamilyRiskDialog(true)}
+          className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-lg hover:border-sky-300 hover:scale-105 transition-all duration-300"
+        >
+          <div className="relative p-5 space-y-3 h-full flex flex-col">
+            <div className="flex items-start justify-between gap-2">
+              <div className="h-10 w-10 rounded-xl bg-sky-100 flex items-center justify-center">
+                <Activity className="h-5.5 w-5.5 text-sky-600" />
+              </div>
+              <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100 whitespace-nowrap flex-shrink-0">
+                Family Risk
+              </span>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm leading-snug">Family Health Tree</h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-tight line-clamp-2 flex-1">Predefined questions and options for disease risk prediction.</p>
+
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-white bg-sky-500 group-hover:bg-sky-600 px-2.5 py-1.5 rounded-xl transition-all w-full mt-1 justify-center">
+              <span>Open</span>
+              <ChevronRight className="h-3 w-3 transform group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* ── Find Doctors ─────────────────────────────────────────────── */}
@@ -1074,7 +1548,7 @@ const PatientDashboard = () => {
               <p className="text-sky-700 text-xs mt-0.5 font-medium">Track and manage all your appointments</p>
             </div>
           </div>
-          <div className="text-xs font-semibold text-sky-600 bg-sky-100 px-3 py-1.5 rounded-lg">📊 Table view</div>
+          <div className="text-xs font-semibold text-sky-600 bg-sky-100 px-3 py-1.5 rounded-lg">Compact Preview</div>
         </div>
 
         <div className="p-6 space-y-5">
@@ -1083,32 +1557,40 @@ const PatientDashboard = () => {
           <div className="flex gap-1 bg-slate-100 p-1 rounded-2xl w-fit">
             {[
               { key: "all",       label: "All",       count: allAppointments.length },
+              { key: "accepted",  label: "Accepted",  count: acceptedAppointments.length },
               { key: "upcoming",  label: "Upcoming",  count: upcomingAppointments.length },
               { key: "past",      label: "Completed", count: pastAppointments.length },
               { key: "cancelled", label: "Cancelled", count: cancelledAppointments.length },
-            ].map((tab) => (
+            ].map((tab) => {
+              const isAcceptedAttention = tab.key === "accepted" && tab.count > 0;
+              return (
               <button
                 key={tab.key}
                 onClick={() => setAppointmentTab(tab.key as typeof appointmentTab)}
                 className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                   appointmentTab === tab.key ? "bg-white text-sky-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                } ${
+                  isAcceptedAttention ? "animate-pulse ring-2 ring-emerald-200/80" : ""
                 }`}
               >
-                {tab.label}
+                <span className="inline-flex items-center gap-1.5">
+                  {tab.label}
+                  {isAcceptedAttention && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+                </span>
                 <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
                   appointmentTab === tab.key ? "bg-slate-100 text-slate-600" : "bg-slate-200/70 text-slate-500"
                 }`}>{tab.count}</span>
               </button>
-            ))}
+              );
+            })}
           </div>
           <Button
             size="sm"
-            variant="outline"
-            onClick={() => {loadDoctors(false); fetchAppointments();}}
-            disabled={loadingDoctors}
-            className="rounded-xl text-xs border-cyan-200 text-cyan-600 hover:bg-cyan-50 font-semibold gap-1.5"
+            onClick={handleAppointmentsRefresh}
+            disabled={refreshingAppointments}
+            className="rounded-xl h-10 min-w-[126px] px-5 text-sm bg-sky-500 hover:bg-sky-600 text-white font-semibold gap-1.5 shadow-sm"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loadingDoctors ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${refreshingAppointments ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           </div>
@@ -1126,8 +1608,12 @@ const PatientDashboard = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(appointmentTab === "all" ? allAppointments : appointmentTab === "upcoming" ? upcomingAppointments : appointmentTab === "past" ? pastAppointments : cancelledAppointments).map((apt: any) => (
-                  <TableRow key={apt._id}>
+                {previewAppointments.map((apt: any) => {
+                  const aptId = String(apt._id || apt.id || "");
+                  const waitingInfo = doctorWaitingByAppointment[aptId];
+                  const isDoctorWaiting = !!waitingInfo;
+                  return (
+                  <TableRow key={apt._id} className={isDoctorWaiting ? "border-l-4 border-l-emerald-500 bg-emerald-50/40" : ""}>
                     <TableCell>
                       <div className="font-semibold text-slate-900">{doctorDisplayName(apt.doctorName)}</div>
                       <div className="text-xs text-slate-600">{apt.specialization || "General"}</div>
@@ -1139,31 +1625,79 @@ const PatientDashboard = () => {
                     <TableCell className="text-sm text-slate-700">{formatLocation(apt.location) || "-"}</TableCell>
                     <TableCell>{getStatusBadge(apt.status)}</TableCell>
                     <TableCell className="text-right">
-                      <div className="grid gap-1 min-w-[180px]">
-                        {(apt.status === "Accepted" || apt.status === "In Progress") && (
-                          <Button size="sm" className="w-full bg-cyan-500 hover:bg-cyan-600" onClick={() => navigate(`/video/${apt._id}`)}>
-                            Join Video
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {isDoctorWaiting && (
+                          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+                            {doctorDisplayName(waitingInfo?.doctorName || apt.doctorName)} in progress
+                          </Badge>
+                        )}
+                        {apt.status === "In Progress" && isDoctorWaiting && (
+                          <Button
+                            size="sm"
+                            title="Join Video Call"
+                            className="h-9 px-3 gap-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-xs font-semibold"
+                            onClick={() => navigate(`/video/${apt._id}`)}
+                          >
+                            <Video className="h-4 w-4" /> Join
+                          </Button>
+                        )}
+                        {apt.status === "Accepted" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            title="Waiting for doctor to start"
+                            className="h-9 px-3 gap-1.5 rounded-lg border-amber-200 text-amber-700 bg-amber-50 text-xs font-semibold"
+                          >
+                            <Clock className="h-4 w-4" /> Waiting for Doctor
+                          </Button>
+                        )}
+                        {apt.status === "In Progress" && !isDoctorWaiting && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled
+                            title="Waiting for doctor to start"
+                            className="h-9 px-3 gap-1.5 rounded-lg border-amber-200 text-amber-700 bg-amber-50 text-xs font-semibold"
+                          >
+                            <Clock className="h-4 w-4" /> Waiting for Doctor
                           </Button>
                         )}
                         {(apt.status === "Booked" || apt.status === "Accepted") && (
-                          <Button size="sm" variant="outline" className="w-full border-red-200 text-red-600" onClick={() => handleCancelClick(apt._id)}>
-                            Cancel
+                          <Button
+                            size="sm"
+                            title="Cancel Appointment"
+                            className="h-9 px-3 gap-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold"
+                            onClick={() => handleCancelClick(apt._id)}
+                          >
+                            <XCircle className="h-4 w-4" /> Cancel
                           </Button>
                         )}
                         {apt.status === "Completed" && (
                           <>
-                            <Button size="sm" variant="outline" className="w-full" onClick={() => {
-                              const appointmentId = apt._id || apt.id;
-                              if (appointmentId) navigate(`/prescriptions/appointment/${appointmentId}`);
-                            }}>Prescription</Button>
-                            {!apt.reviewSubmitted && <Button size="sm" variant="outline" className="w-full border-amber-200 text-amber-700" onClick={() => openReviewDialog(apt)}>Rate Doctor</Button>}
+                            <Button
+                              size="sm"
+                              title="View Prescription"
+                              className="h-9 px-3 gap-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-xs font-semibold"
+                              onClick={() => {
+                                const appointmentId = apt._id || apt.id;
+                                if (appointmentId) navigate(`/prescriptions/appointment/${appointmentId}`);
+                              }}
+                            >
+                              <FileText className="h-4 w-4" /> Rx
+                            </Button>
+                            <RateButton
+                              rated={!!apt.reviewSubmitted}
+                              onClick={() => openReviewDialog(apt)}
+                            />
                           </>
                         )}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
-                {(appointmentTab === "all" ? allAppointments : appointmentTab === "upcoming" ? upcomingAppointments : appointmentTab === "past" ? pastAppointments : cancelledAppointments).length === 0 && (
+                  );
+                })}
+                {previewAppointments.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-10 text-slate-500">No appointments found for this tab.</TableCell>
                   </TableRow>
@@ -1171,6 +1705,21 @@ const PatientDashboard = () => {
               </TableBody>
             </Table>
           </div>
+
+          {currentTabAppointments.length > APPOINTMENTS_PREVIEW_LIMIT && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-sky-100 bg-sky-50/60 px-4 py-3">
+              <p className="text-xs text-slate-600">
+                Showing <span className="font-semibold text-slate-900">{APPOINTMENTS_PREVIEW_LIMIT}</span> of <span className="font-semibold text-slate-900">{currentTabAppointments.length}</span> appointments.
+              </p>
+              <Button
+                size="sm"
+                onClick={() => navigate('/patient/appointments')}
+                className="rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-xs px-3"
+              >
+                View All
+              </Button>
+            </div>
+          )}
 
           {appointmentTab === "cancelled" && cancelledAppointments.length > 0 && (
             <Button
@@ -1276,6 +1825,125 @@ const PatientDashboard = () => {
               Confirm Booking
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Family Health Tree Risk Predictor Dialog */}
+      <Dialog open={showFamilyRiskDialog} onOpenChange={setShowFamilyRiskDialog}>
+        <DialogContent className="max-w-5xl rounded-2xl border border-sky-200 shadow-xl p-0 overflow-hidden bg-white max-h-[88vh] flex flex-col">
+          <div className="px-6 py-5 border-b border-sky-100 bg-gradient-to-r from-sky-50 to-white">
+            <DialogTitle className="text-slate-900 font-bold text-lg">Family Health Tree Risk Card</DialogTitle>
+            <DialogDescription className="text-sky-700 text-sm mt-0.5">
+              Choose a disease, answer predefined questions, and get a frontend risk estimate.
+            </DialogDescription>
+          </div>
+
+          <div className="p-6 grid grid-cols-1 xl:grid-cols-3 gap-6 overflow-y-auto">
+            <div className="xl:col-span-2 space-y-4">
+              <div>
+                <p className="text-xs font-bold text-slate-600 uppercase tracking-widest mb-2">Select Disease</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {FAMILY_RISK_DISEASES.map((disease) => {
+                    const active = selectedRiskDiseases.includes(disease.key);
+                    return (
+                      <button
+                        key={disease.key}
+                        onClick={() => toggleRiskDisease(disease.key)}
+                        className={`rounded-xl border-2 px-3 py-2 text-left transition-all ${
+                          active
+                            ? "border-sky-500 bg-gradient-to-r from-sky-600 to-sky-500 text-white shadow-md"
+                            : "border-slate-200 bg-white hover:border-sky-300 hover:bg-sky-50"
+                        }`}
+                      >
+                        <p className={`text-sm font-bold ${active ? "text-white" : "text-slate-900"}`}>{disease.label}</p>
+                        <p className={`text-[11px] ${active ? "text-sky-100" : "text-slate-500"}`}>{disease.helper}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">Family & Lifestyle Questions</p>
+                {activeRiskQuestions.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-sky-200 bg-sky-50/70 p-4 text-sm text-sky-800 font-medium">
+                    Select one or more diseases above. Click again on a selected disease to remove it.
+                  </div>
+                )}
+
+                {activeRiskQuestions.map((question, idx) => (
+                  <div key={question.id} className="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm font-semibold text-slate-800">
+                        <span className="text-sky-600 mr-1">Q{idx + 1}.</span>
+                        {question.label}
+                        <span className="ml-2 text-[11px] font-bold uppercase tracking-wide text-sky-700">{question.diseaseLabel}</span>
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        {RISK_OPTION_LABELS.map((opt) => {
+                          const selected = familyRiskAnswers[question.id] === opt.key;
+                          return (
+                            <button
+                              key={opt.key}
+                              onClick={() => updateFamilyRiskAnswer(question.id, opt.key)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                                selected
+                                  ? "bg-sky-600 text-white border-sky-600 shadow-sm"
+                                  : "bg-white text-slate-600 border-slate-200 hover:border-sky-300 hover:text-sky-700"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-5 flex flex-col justify-between">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-widest text-sky-700">Predicted Risk</p>
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${familyRiskResult.chipClass}`}>
+                    {familyRiskResult.level}
+                  </span>
+                </div>
+
+                <div className="rounded-xl bg-white border border-sky-100 p-4 text-center">
+                  <p className="text-4xl font-black text-slate-900 leading-none">{familyRiskResult.percent}%</p>
+                  <p className="text-xs text-slate-500 mt-1">estimated inherited risk trend</p>
+                </div>
+
+                <div>
+                  <div className="h-3 bg-white rounded-full border border-sky-100 overflow-hidden">
+                    <div
+                      className={`h-full bg-gradient-to-r ${familyRiskResult.barClass} transition-all duration-500`}
+                      style={{ width: `${familyRiskResult.percent}%` }}
+                    />
+                  </div>
+                </div>
+
+                <p className="text-sm text-slate-700 leading-relaxed">{familyRiskResult.summary}</p>
+              </div>
+
+              <div className="space-y-3 pt-5 mt-5 border-t border-sky-100">
+                <button
+                  onClick={resetFamilyRiskForm}
+                  className="w-full rounded-xl border border-sky-200 bg-white hover:bg-sky-50 text-sky-700 font-semibold text-sm py-2 transition-all"
+                >
+                  Reset Answers
+                </button>
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-semibold text-amber-800 leading-relaxed">
+                    ⚠️ This is an educational frontend estimate only, not a doctor diagnosis. Please consult your healthcare professional.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

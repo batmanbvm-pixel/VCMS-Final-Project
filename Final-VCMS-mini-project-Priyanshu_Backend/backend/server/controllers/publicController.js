@@ -768,20 +768,24 @@ exports.submitReview = async (req, res) => {
       return res.status(400).json({ message: 'Review allowed only after completed consultation' });
     }
 
-    if (appointment.reviewSubmitted) {
-      return res.status(400).json({ message: 'Review already submitted for this appointment' });
-    }
-
     const existing = await DoctorReview.findOne({ appointmentId });
     if (existing) {
+      if (!appointment.reviewSubmitted) {
+        appointment.reviewSubmitted = true;
+        await appointment.save();
+      }
       return res.status(400).json({ message: 'Review already exists for this appointment' });
     }
+
+    const doctor = await User.findById(doctorId).select('name specialization').lean();
 
     const review = await DoctorReview.create({
       appointmentId,
       doctorId,
       patientId: req.user._id,
       patientName: req.user.name || 'Verified Patient',
+      doctorName: doctor?.name || 'Doctor',
+      doctorSpecialization: doctor?.specialization || 'General Practitioner',
       rating: numericRating,
       comment,
       verifiedBooking: true,

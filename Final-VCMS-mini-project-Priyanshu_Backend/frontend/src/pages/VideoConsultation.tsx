@@ -21,8 +21,14 @@ import {
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, FileText, Loader,
   Plus, Trash2, CheckCircle, Clock, RefreshCw, Sparkles,
-  ClipboardList, User, Stethoscope, CalendarDays, ChevronDown, ChevronUp
+  ClipboardList, User, Stethoscope, CalendarDays, ChevronDown, ChevronUp, LogOut
 } from "lucide-react";
+
+const getEntityId = (entity: any): string => {
+  if (!entity) return "";
+  if (typeof entity === "string") return entity;
+  return String(entity._id || entity.id || "");
+};
 
 interface Medication {
   name: string;
@@ -51,6 +57,63 @@ const STUN_SERVERS = [
   { urls: "stun:stun2.l.google.com:19302" },
 ];
 
+const getMediaAccessErrorDetails = (error: unknown): { title: string; description: string } => {
+  const errorName = (error as { name?: string })?.name || "";
+  const hasMediaDevices = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+  const secureContext = typeof window !== "undefined" ? window.isSecureContext : true;
+
+  if (!secureContext || !hasMediaDevices || errorName === "SecurityError") {
+    return {
+      title: "Secure connection required",
+      description: "Camera/microphone need a secure site. Please open on HTTPS or localhost and try again.",
+    };
+  }
+
+  if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+    return {
+      title: "Permission denied",
+      description: "Please allow camera and microphone access in your browser site settings.",
+    };
+  }
+
+  if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+    return {
+      title: "Device not found",
+      description: "No camera or microphone was found. Please connect a device and retry.",
+    };
+  }
+
+  if (errorName === "NotReadableError" || errorName === "TrackStartError") {
+    return {
+      title: "Device busy",
+      description: "Camera/microphone is being used by another app. Close that app and try again.",
+    };
+  }
+
+  return {
+    title: "Media access failed",
+    description: "Failed to access camera/microphone. Please wait a moment and try again.",
+  };
+};
+
+const isPermissionDeniedError = (error: unknown): boolean => {
+  const errorName = (error as { name?: string })?.name || "";
+  return errorName === "NotAllowedError" || errorName === "PermissionDeniedError";
+};
+
+const formatAppointmentDate = (rawDate: unknown): string => {
+  if (!rawDate) return "Date TBD";
+  const parsed = new Date(String(rawDate));
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+  return String(rawDate);
+};
+
 const VideoConsultation = () => {
   const { appointmentId } = useParams<{ appointmentId: string }>();
   const { user } = useAuth();
@@ -72,6 +135,8 @@ const VideoConsultation = () => {
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
   const [completingConsultation, setCompletingConsultation] = useState(false);
   const [consultationCompleted, setConsultationCompleted] = useState(false);
+  const [mediaPermissionDenied, setMediaPermissionDenied] = useState(false);
+  const [remoteWaitingInfo, setRemoteWaitingInfo] = useState<{ waiting: boolean; role: "doctor" | "patient" | "unknown" }>({ waiting: true, role: "unknown" });
   const [rxForm, setRxForm] = useState<PrescriptionFormData>({
     diagnosis: "",
     clinicalNotes: "",
@@ -101,22 +166,44 @@ const VideoConsultation = () => {
   const remoteStreamRef = useRef<MediaStream>(new MediaStream());
   // Keep a ref to appointment so async WebRTC callbacks can access it
   const appointmentRef = useRef<any>(null);
+  const waitingToastKeyRef = useRef<string>("");
+  // Track whether the call was ever started so cleanup can emit video:end-call
+  const callActiveRef = useRef<boolean>(false);
+  const initializingCallRef = useRef<boolean>(false);
+  const patientAutoJoinTriggeredRef = useRef<boolean>(false);
 
+  // Track whether the doctor is present in the room (for patient waiting room UI)
+  const [doctorPresent, setDoctorPresent] = useState(false);
   const normalizedRole = (user?.role || "").toLowerCase();
   const isDoctor = normalizedRole === "doctor";
+  const inPatientWaitingRoom = !isDoctor && !callActive;
+
+  const getDoctorMongoId = () => getEntityId(appointmentRef.current?.doctorId || appointment?.doctorId);
+  const getPatientMongoId = () => getEntityId(appointmentRef.current?.patientId || appointment?.patientId);
+
+  const emitWaitingStatus = (waiting: boolean) => {
+    const appt = appointmentRef.current;
+    const targetId = isDoctor ? getEntityId(appt?.patientId) : getEntityId(appt?.doctorId);
+    if (!targetId || !appointmentId) return;
+
+    emit("video:waiting-status", {
+      to: targetId,
+      appointmentId,
+      waiting,
+      role: isDoctor ? "doctor" : "patient",
+    });
+  };
 
   // Complete consultation function
   const completeConsultation = async () => {
-    if (!appointmentId || completingConsultation || consultationCompleted) return;
+    if (!isDoctor || !appointmentId || completingConsultation || consultationCompleted) return;
     
     try {
       setCompletingConsultation(true);
       await api.put(`/appointments/${appointmentId}/status`, { status: 'completed' });
       
       // Emit socket event to notify other party
-      const targetId = isDoctor 
-        ? appointment?.patientId?._id || appointment?.patientId 
-        : appointment?.doctorId?._id || appointment?.doctorId;
+      const targetId = getPatientMongoId();
       
       if (targetId) {
         emit('consultation:completed', { 
@@ -134,15 +221,6 @@ const VideoConsultation = () => {
       
       // End the call
       endCall();
-      
-      // Redirect after 2 seconds
-      setTimeout(() => {
-        if (isDoctor) {
-          navigate('/doctor-dashboard');
-        } else {
-          navigate('/patient/appointments');
-        }
-      }, 2000);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -159,18 +237,19 @@ const VideoConsultation = () => {
 
     const handleConsultationCompleted = (data: any) => {
       if (data.appointmentId === appointmentId) {
+        if (data.completedBy === user?._id) return;
         setConsultationCompleted(true);
         toast({
           title: "Consultation Completed",
-          description: "The other party has ended the consultation.",
+          description: "Doctor has completed this consultation.",
         });
-        
-        // Auto-complete for this party too
-        setTimeout(() => {
-          if (!completingConsultation) {
-            completeConsultation();
-          }
-        }, 1000);
+
+        cleanupCall();
+        if (isDoctor) {
+          navigate('/doctor/today', { replace: true });
+        } else {
+          navigate('/patient/appointments', { replace: true });
+        }
       }
     };
 
@@ -179,19 +258,52 @@ const VideoConsultation = () => {
     return () => {
       off('consultation:completed', handleConsultationCompleted);
     };
-  }, [appointmentId, completingConsultation]);
+  }, [appointmentId, user?._id, isDoctor, navigate, on, off, toast]);
 
   // Initialize WebRTC
   useEffect(() => {
     if (!appointmentId || !user) return;
 
-    fetchAppointment();
-    initializeCall();
+    let isMounted = true;
+
+    const setupCall = async () => {
+      const appt = await fetchAppointment();
+      if (!isMounted) return;
+      if (isDoctor) {
+        // Doctor always starts camera immediately
+        await initializeCall();
+      } else {
+        // Patient: check if doctor is already in room (appointment in-progress from DB)
+        const status = String(appt?.status || "").toLowerCase();
+        if (["in-progress", "in progress"].includes(status)) {
+          setDoctorPresent(true);
+        }
+        // Patient will start camera only when they click "Join Now"
+      }
+    };
+
+    setupCall();
 
     return () => {
+      isMounted = false;
+      const appt = appointmentRef.current;
+      const targetId = isDoctor ? getEntityId(appt?.patientId) : getEntityId(appt?.doctorId);
+      if (targetId && appointmentId) {
+        // If the call was active, send end-call so the other party is also redirected
+        // Only doctor closing the page sends end-call (patient leaving should not kick doctor out)
+        if (callActiveRef.current && isDoctor) {
+          emit("video:end-call", { to: targetId, appointmentId });
+        }
+        emit("video:waiting-status", {
+          to: targetId,
+          appointmentId,
+          waiting: false,
+          role: isDoctor ? "doctor" : "patient",
+        });
+      }
       cleanupCall();
     };
-  }, [appointmentId, user]);
+  }, [appointmentId, user, emit, isDoctor]);
 
   useEffect(() => {
     if (!appointmentId) return;
@@ -224,6 +336,28 @@ const VideoConsultation = () => {
     joinRoom(`video_${appointmentId}`);
   }, [appointmentId, user, joinRoom]);
 
+  // When patient auto-joins, call can start while waiting-room UI is still mounted.
+  // Re-bind streams once active-call video elements are rendered.
+  useEffect(() => {
+    if (!callActive) return;
+
+    const localStream = localStreamRef.current;
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch(() => {
+        // Autoplay may be blocked until user gesture in some browsers.
+      });
+    }
+
+    const remoteStream = remoteStreamRef.current;
+    if (remoteVideoRef.current && remoteStream && remoteStream.getTracks().length > 0) {
+      remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch(() => {
+        // Autoplay may be blocked until user gesture in some browsers.
+      });
+    }
+  }, [callActive]);
+
   // ── WebRTC signaling via socket ──
   useEffect(() => {
     if (!appointmentId || !user) return;
@@ -237,7 +371,7 @@ const VideoConsultation = () => {
         await pc.setLocalDescription(answer);
         // Always reply to the doctor's MongoDB _id (not socket.id),
         // because emitToUser on the server keys by MongoDB userId.
-        const doctorMongoId = appointmentRef.current?.doctorId?._id;
+        const doctorMongoId = getDoctorMongoId();
         if (doctorMongoId) {
           emit("video:answer", { answer, to: doctorMongoId, appointmentId });
         }
@@ -278,7 +412,7 @@ const VideoConsultation = () => {
       if (!isDoctor) return;
       const pc = peerConnectionRef.current;
       if (!pc) return;
-      const patientId = appointmentRef.current?.patientId?._id;
+      const patientId = getPatientMongoId();
       if (!patientId) return;
       try {
         const offer = await pc.createOffer();
@@ -289,11 +423,49 @@ const VideoConsultation = () => {
       }
     };
 
+    const handleWaitingStatus = ({
+      waiting,
+      role,
+      appointmentId: incomingAppointmentId,
+    }: {
+      waiting?: boolean;
+      role?: "doctor" | "patient";
+      appointmentId?: string;
+    }) => {
+      if (!incomingAppointmentId || incomingAppointmentId !== appointmentId) return;
+
+      const normalizedRole = role === "doctor" || role === "patient" ? role : "unknown";
+      const isWaiting = !!waiting;
+
+      setRemoteWaitingInfo({ waiting: isWaiting, role: normalizedRole });
+
+      // Update doctor-presence flag so patient's waiting room reacts
+      if (!isDoctor && normalizedRole === "doctor") {
+        setDoctorPresent(isWaiting);
+      }
+
+      // Always show toast so the other party knows when someone joins/rejoins
+      // (even if a connection was previously established)
+      const toastKey = `${incomingAppointmentId}:${normalizedRole}:${isWaiting ? "waiting" : "ready"}`;
+      if (waitingToastKeyRef.current === toastKey) return;
+      waitingToastKeyRef.current = toastKey;
+
+      if (isWaiting) {
+        toast({
+          title: normalizedRole === "doctor" ? "Doctor is waiting" : "Patient is waiting",
+          description: normalizedRole === "doctor"
+            ? "Doctor has joined the consultation. You can join now."
+            : "Patient has joined the consultation. You can start now.",
+        });
+      }
+    };
+
     on("video:offer", handleOffer);
     on("video:answer", handleAnswer);
     on("video:ice-candidate", handleIceCandidate);
     on("video:end-call", handleEndCall);
     on("video:user-ready", handlePatientReady);
+    on("video:waiting-status", handleWaitingStatus);
 
     return () => {
       off("video:offer", handleOffer);
@@ -301,15 +473,16 @@ const VideoConsultation = () => {
       off("video:ice-candidate", handleIceCandidate);
       off("video:end-call", handleEndCall);
       off("video:user-ready", handlePatientReady);
+      off("video:waiting-status", handleWaitingStatus);
     };
-  }, [appointmentId, user, isDoctor, on, off, emit, navigate, toast]);
+  }, [appointmentId, user, isDoctor, on, off, emit, navigate, toast, connected]);
 
   // ── Doctor: fallback offer if patient was already ready before doctor joined ──
   useEffect(() => {
     if (!isDoctor || !callActive || !appointmentRef.current) return;
     const pc = peerConnectionRef.current;
     if (!pc) return;
-    const patientId = appointmentRef.current?.patientId?._id;
+    const patientId = getPatientMongoId();
     if (!patientId) return;
 
     // 2-second fallback: in case patient joined first and we missed their ready signal
@@ -336,7 +509,9 @@ const VideoConsultation = () => {
         const appt = response.data.appointment;
         setAppointment(appt);
         appointmentRef.current = appt;
+        return appt;
       }
+      return null;
     } catch (error: any) {
       toast({
         title: "Error",
@@ -344,6 +519,7 @@ const VideoConsultation = () => {
         variant: "destructive",
       });
       setTimeout(() => navigate(-1), 1500);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -487,7 +663,20 @@ const VideoConsultation = () => {
   };
 
   const initializeCall = async () => {
+    if (callActiveRef.current || initializingCallRef.current) return;
+    initializingCallRef.current = true;
+
     try {
+      setMediaPermissionDenied(false);
+
+      if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) {
+        const { title, description } = getMediaAccessErrorDetails({ name: "SecurityError" });
+        toast({ title, description, variant: "destructive" });
+        return;
+      }
+
+      remoteStreamRef.current = new MediaStream();
+
       // Get media stream
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -495,8 +684,13 @@ const VideoConsultation = () => {
       });
 
       localStreamRef.current = stream;
+      setMuted(!(stream.getAudioTracks()[0]?.enabled ?? true));
+      setCameraOff(!(stream.getVideoTracks()[0]?.enabled ?? true));
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {
+          // Autoplay can be blocked until first interaction in some browsers.
+        });
       }
 
       // Create peer connection
@@ -516,7 +710,11 @@ const VideoConsultation = () => {
         remoteStreamRef.current.addTrack(event.track);
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = remoteStreamRef.current;
+          remoteVideoRef.current.play().catch(() => {
+            // Autoplay might be blocked; user gesture can start playback.
+          });
         }
+        setConnected(true);
       };
 
       // Handle ICE candidates — forward to the other peer via socket signaling
@@ -524,8 +722,8 @@ const VideoConsultation = () => {
         if (event.candidate) {
           const appt = appointmentRef.current;
           const targetId = isDoctor
-            ? appt?.patientId?._id
-            : appt?.doctorId?._id;
+            ? getEntityId(appt?.patientId)
+            : getEntityId(appt?.doctorId);
           if (targetId) {
             emit("video:ice-candidate", { candidate: event.candidate, to: targetId, appointmentId });
           }
@@ -539,20 +737,30 @@ const VideoConsultation = () => {
           peerConnection.connectionState === "completed"
         ) {
           setConnected(true);
+          setRemoteWaitingInfo((prev) => ({ ...prev, waiting: false }));
+          emitWaitingStatus(false);
+        } else if (peerConnection.connectionState === "closed") {
+          setConnected(false);
+          setRemoteWaitingInfo((prev) => ({ ...prev, waiting: false }));
+          emitWaitingStatus(false);
         } else if (
           peerConnection.connectionState === "disconnected" ||
-          peerConnection.connectionState === "failed" ||
-          peerConnection.connectionState === "closed"
+          peerConnection.connectionState === "failed"
         ) {
           setConnected(false);
+          setRemoteWaitingInfo((prev) => ({ ...prev, waiting: true }));
+          emitWaitingStatus(true);
         }
       };
 
       setCallActive(true);
+      callActiveRef.current = true;
+      setRemoteWaitingInfo({ waiting: true, role: isDoctor ? "patient" : "doctor" });
+      emitWaitingStatus(true);
 
       // Patient signals readiness to doctor so doctor can create WebRTC offer
       if (!isDoctor) {
-        const doctorId = appointmentRef.current?.doctorId?._id;
+        const doctorId = getDoctorMongoId();
         if (doctorId) {
           // Small delay to ensure socket handlers are registered
           setTimeout(() => {
@@ -561,50 +769,166 @@ const VideoConsultation = () => {
         }
       }
     } catch (error) {
+      if (!isDoctor) {
+        patientAutoJoinTriggeredRef.current = false;
+      }
+      setMediaPermissionDenied(isPermissionDeniedError(error));
+      const { title, description } = getMediaAccessErrorDetails(error);
       toast({
-        title: "Error",
-        description: "Failed to access camera/microphone",
+        title,
+        description,
         variant: "destructive",
       });
+    } finally {
+      initializingCallRef.current = false;
     }
   };
+
+  // Patient auto-joins as soon as doctor is marked present.
+  // This removes extra manual "Join" step and opens video directly.
+  useEffect(() => {
+    if (isDoctor) return;
+    if (!doctorPresent) return;
+    if (callActive || callActiveRef.current) return;
+    if (patientAutoJoinTriggeredRef.current) return;
+
+    patientAutoJoinTriggeredRef.current = true;
+    initializeCall();
+  }, [isDoctor, doctorPresent, callActive]);
 
   const toggleMute = () => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach((track) => {
-        track.enabled = !track.enabled;
-      });
-      setMuted((prev) => !prev);
+    const stream = localStreamRef.current;
+    if (!stream) {
+      if (mediaPermissionDenied) {
+        toast({
+          title: "Permission denied",
+          description: "Browser blocked microphone/camera. On Mac, enable permissions in System Settings and browser site settings, then reload.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Call media not ready", description: "Please wait a moment and try again.", variant: "destructive" });
+      return;
     }
+
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      if (mediaPermissionDenied) {
+        toast({
+          title: "Permission denied",
+          description: "Microphone access is blocked. Allow it in browser settings and Mac privacy settings, then reload.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Call media not ready", description: "Please wait a moment and try again.", variant: "destructive" });
+      return;
+    }
+
+    const shouldEnable = !audioTracks[0].enabled;
+    audioTracks.forEach((track) => {
+      track.enabled = shouldEnable;
+    });
+
+    peerConnectionRef.current?.getSenders().forEach((sender) => {
+      if (sender.track?.kind === "audio") {
+        sender.track.enabled = shouldEnable;
+      }
+    });
+
+    setMuted(!shouldEnable);
   };
 
-  const toggleCamera = () => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getVideoTracks().forEach((track) => {
-        track.enabled = !track.enabled;
-      });
-      setCameraOff((prev) => !prev);
+  const toggleCamera = async () => {
+    const stream = localStreamRef.current;
+    if (!stream) {
+      if (mediaPermissionDenied) {
+        toast({
+          title: "Permission denied",
+          description: "Browser blocked camera/microphone. On Mac, enable permissions in System Settings and browser site settings, then reload.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Call media not ready", description: "Please wait a moment and try again.", variant: "destructive" });
+      return;
     }
+
+    let videoTracks = stream.getVideoTracks();
+    const hasVideoTrack = videoTracks.length > 0;
+
+    // If camera track was removed/stopped, reacquire it when user turns camera on.
+    if (!hasVideoTrack) {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) {
+          const { title, description } = getMediaAccessErrorDetails({ name: "SecurityError" });
+          toast({ title, description, variant: "destructive" });
+          return;
+        }
+
+        const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        const newVideoTrack = camStream.getVideoTracks()[0];
+        if (!newVideoTrack) {
+          toast({ title: "Camera unavailable", variant: "destructive" });
+          return;
+        }
+
+        stream.addTrack(newVideoTrack);
+        const videoSender = peerConnectionRef.current?.getSenders().find((s) => s.track?.kind === "video");
+        if (videoSender) {
+          await videoSender.replaceTrack(newVideoTrack);
+        } else if (peerConnectionRef.current) {
+          peerConnectionRef.current.addTrack(newVideoTrack, stream);
+        }
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch(() => {});
+        }
+
+        setCameraOff(false);
+        return;
+      } catch (error) {
+        setMediaPermissionDenied(isPermissionDeniedError(error));
+        const { title, description } = getMediaAccessErrorDetails(error);
+        toast({ title, description, variant: "destructive" });
+        return;
+      }
+    }
+
+    videoTracks = stream.getVideoTracks();
+    const shouldEnable = !videoTracks[0].enabled;
+    videoTracks.forEach((track) => {
+      track.enabled = shouldEnable;
+    });
+
+    peerConnectionRef.current?.getSenders().forEach((sender) => {
+      if (sender.track?.kind === "video") {
+        sender.track.enabled = shouldEnable;
+      }
+    });
+
+    setCameraOff(!shouldEnable);
   };
 
   const endCall = async () => {
-    // Notify the other party before cleanup
     const appt = appointmentRef.current;
-    const targetId = isDoctor ? appt?.patientId?._id : appt?.doctorId?._id;
+    const targetId = isDoctor ? getEntityId(appt?.patientId) : getEntityId(appt?.doctorId);
     if (targetId) {
-      emit("video:end-call", { to: targetId, appointmentId });
+      if (isDoctor) {
+        // Doctor ending the call → notify patient so they are also redirected
+        emit("video:end-call", { to: targetId, appointmentId });
+      }
+      // Both roles clear their waiting presence so the other party knows
+      emit("video:waiting-status", {
+        to: targetId,
+        appointmentId,
+        waiting: false,
+        role: isDoctor ? "doctor" : "patient",
+      });
     }
 
     cleanupCall();
-
-    // Mark appointment as completed
-    try {
-      if (appointmentId) {
-        await api.put(`/appointments/${appointmentId}/status`, { status: "completed" });
-      }
-    } catch (error) {
-      // Update failed silently
-    }
 
     // Navigate back to respective dashboard
     if (isDoctor) {
@@ -631,7 +955,21 @@ const VideoConsultation = () => {
       localStreamRef.current = null;
     }
 
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach((track) => track.stop());
+      remoteStreamRef.current = new MediaStream();
+    }
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+
     setCallActive(false);
+    callActiveRef.current = false;
     setConnected(false);
   };
 
@@ -678,17 +1016,78 @@ const VideoConsultation = () => {
           <div className="flex items-center gap-2">
             {connected ? (
               <Badge className="bg-sky-500 text-white hover:bg-sky-600">● Live</Badge>
+            ) : inPatientWaitingRoom ? (
+              <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">● Waiting Room</Badge>
             ) : (
               <Badge variant="outline" className="text-cyan-600 border-cyan-300">● Connecting...</Badge>
             )}
             <Badge className="bg-sky-100 text-sky-700 border-sky-200">
               <CalendarDays className="h-3 w-3 mr-1" />
-              {appointment.date} · {appointment.time}
+              {formatAppointmentDate(appointment.date)} · {appointment.time}
             </Badge>
           </div>
         </div>
 
         {/* Video Grid */}
+        {/* ─── Patient Waiting Room (shown before patient joins) ─── */}
+        {inPatientWaitingRoom ? (
+          <Card className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <CardContent className="py-14 flex flex-col items-center justify-center gap-6 text-center">
+              {doctorPresent ? (
+                // Doctor is in the room — patient can join
+                <>
+                  <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-green-100">
+                    <Video className="h-12 w-12 text-green-600" />
+                    <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-green-500 border-2 border-white animate-pulse" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-2xl font-bold text-slate-900">
+                      Dr. {String(appointment.doctorId?.name || "Doctor").replace(/^dr\.?\s*/i, "")} is ready!
+                    </p>
+                    <p className="text-sm text-slate-600">Doctor has started the consultation. Connecting you to video now...</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 px-4 py-2 rounded-full">
+                    <Loader className="h-3 w-3 animate-spin" /> Starting video...
+                  </div>
+                  {mediaPermissionDenied && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-red-200 text-red-700 bg-red-50 hover:bg-red-100"
+                      onClick={() => initializeCall()}
+                    >
+                      Retry Camera/Mic Access
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700" onClick={() => navigate("/patient")}>
+                    <LogOut className="h-4 w-4 mr-1" /> Leave
+                  </Button>
+                </>
+              ) : (
+                // Doctor hasn't joined yet
+                <>
+                  <div className="flex h-24 w-24 items-center justify-center rounded-full bg-sky-100">
+                    <Stethoscope className="h-12 w-12 text-sky-400 animate-pulse" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-2xl font-bold text-slate-900">Waiting for Doctor to Start</p>
+                    <p className="text-sm text-slate-600 max-w-sm">
+                      Dr. {String(appointment.doctorId?.name || "Doctor").replace(/^dr\.?\s*/i, "")} hasn't joined yet.
+                      You'll be notified automatically when they arrive — no need to refresh.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 bg-sky-50 border border-sky-200 px-4 py-2 rounded-full">
+                    <Loader className="h-3 w-3 animate-spin" /> Listening for doctor...
+                  </div>
+                  <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700" onClick={() => navigate("/patient")}>
+                    <LogOut className="h-4 w-4 mr-1" /> Leave Waiting Room
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Local Video */}
           <Card className="bg-white border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -729,12 +1128,22 @@ const VideoConsultation = () => {
                   </div>
                   <div className="text-center space-y-1">
                     <p className="text-sm font-semibold">
-                      {isDoctor ? "Waiting for patient..." : "Waiting for doctor..."}
+                      {remoteWaitingInfo.waiting
+                        ? (remoteWaitingInfo.role === "doctor"
+                          ? "Doctor is waiting..."
+                          : remoteWaitingInfo.role === "patient"
+                            ? "Patient is waiting..."
+                            : (isDoctor ? "Waiting for patient..." : "Waiting for doctor..."))
+                        : (isDoctor ? "Waiting for patient..." : "Waiting for doctor...")}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {isDoctor 
-                        ? "Patient will join the call shortly" 
-                        : "Doctor will start the consultation soon"}
+                      {remoteWaitingInfo.waiting
+                        ? (remoteWaitingInfo.role === "doctor"
+                          ? "Doctor has joined and is waiting for you"
+                          : remoteWaitingInfo.role === "patient"
+                            ? "Patient has joined and is waiting for you"
+                            : (isDoctor ? "Patient will join the call shortly" : "Doctor will start the consultation soon"))
+                        : (isDoctor ? "Patient will join the call shortly" : "Doctor will start the consultation soon")}
                     </p>
                   </div>
                   <Loader className="h-4 w-4 animate-spin" />
@@ -768,7 +1177,7 @@ const VideoConsultation = () => {
               >
                 {muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
               </Button>
-              <span className="text-[10px] text-slate-600 font-medium">{muted ? "Unmute" : "Unmuted"}</span>
+              <span className="text-[10px] text-slate-600 font-medium">{muted ? "Mic Off" : "Mic On"}</span>
             </div>
 
             {/* Camera */}
@@ -783,7 +1192,7 @@ const VideoConsultation = () => {
               >
                 {cameraOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5 text-slate-700" />}
               </Button>
-              <span className="text-[10px] text-slate-600">{cameraOff ? "Camera On" : "Camera Off"}</span>
+              <span className="text-[10px] text-slate-600">{cameraOff ? "Camera Off" : "Camera On"}</span>
             </div>
 
             {/* Prescription (doctor only) */}
@@ -803,21 +1212,23 @@ const VideoConsultation = () => {
               </div>
             )}
 
-            {/* Complete Consultation */}
-            <div className="flex flex-col items-center gap-1">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-12 w-12 rounded-full bg-sky-500 hover:bg-sky-600 text-white border-sky-600 transition-all duration-200 hover:scale-105"
-                onClick={completeConsultation}
-                disabled={completingConsultation || consultationCompleted}
-                title="Complete consultation and end call"
-                aria-label="Complete consultation and end call"
-              >
-                <CheckCircle className="h-5 w-5" />
-              </Button>
-              <span className="text-[10px] text-slate-600">{consultationCompleted ? "Completed" : "Complete"}</span>
-            </div>
+            {/* Complete Consultation (Doctor only) */}
+            {isDoctor && (
+              <div className="flex flex-col items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-12 w-12 rounded-full bg-sky-500 hover:bg-sky-600 text-white border-sky-600 transition-all duration-200 hover:scale-105"
+                  onClick={completeConsultation}
+                  disabled={completingConsultation || consultationCompleted}
+                  title="Complete consultation and end call"
+                  aria-label="Complete consultation and end call"
+                >
+                  <CheckCircle className="h-5 w-5" />
+                </Button>
+                <span className="text-[10px] text-slate-600">{consultationCompleted ? "Completed" : "Complete"}</span>
+              </div>
+            )}
 
             {/* End call */}
             <div className="flex flex-col items-center gap-1">
@@ -826,16 +1237,18 @@ const VideoConsultation = () => {
                 size="icon"
                 className="h-12 w-12 rounded-full transition-all duration-200 hover:scale-105"
                 onClick={endCall}
-                title="End the video call"
-                aria-label="End the video call"
+                title={isDoctor ? "End the video call" : "Leave the consultation"}
+                aria-label={isDoctor ? "End the video call" : "Leave the consultation"}
               >
-                <PhoneOff className="h-5 w-5" />
+                {isDoctor ? <PhoneOff className="h-5 w-5" /> : <LogOut className="h-5 w-5" />}
               </Button>
-              <span className="text-[10px] text-slate-600">End Call</span>
+              <span className="text-[10px] text-slate-600">{isDoctor ? "End Call" : "Leave"}</span>
             </div>
           </div>
           <p className="text-xs text-slate-600">WebRTC peer-to-peer · End-to-end encrypted</p>
-        </div>
+          </div>
+          </div>
+        )}
 
         {/* Prescription Panel */}
         <Card className="bg-white border-slate-200 rounded-2xl shadow-sm overflow-hidden">

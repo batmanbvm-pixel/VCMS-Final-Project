@@ -26,6 +26,8 @@ export interface Prescription {
   id: string;
   _id?: string;
   appointmentId: string;
+  status?: "draft" | "issued" | "viewed" | "picked_up" | "cancelled";
+  diagnosis?: string;
   doctorId: string;
   doctorName: string;
   patientId: string;
@@ -140,6 +142,8 @@ const mapPrescriptionDbToUI = (dbRx: any): Prescription => {
     id: normalizeId(dbRx._id || dbRx.id),
     _id: normalizeId(dbRx._id || dbRx.id),
     appointmentId: normalizeId(dbRx.appointmentId?._id || dbRx.appointmentId),
+    status: String(dbRx.status || "draft").toLowerCase() as Prescription["status"],
+    diagnosis: dbRx.diagnosis || "",
     doctorId: normalizeId(dbRx.doctorId?._id || dbRx.doctorId),
     doctorName: formatDoctorName(dbRx.doctorId?.name),
     patientId: normalizeId(dbRx.patientId?._id || dbRx.patientId),

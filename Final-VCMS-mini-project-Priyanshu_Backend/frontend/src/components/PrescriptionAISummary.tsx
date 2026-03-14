@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import geminiService from "@/services/geminiService";
-import { Sparkles, Loader2, CheckCircle2, AlertCircle, Languages, Clock, AlertTriangle, X, Pill, Timer, Info, Shield } from "lucide-react";
+import { Sparkles, Loader2, CheckCircle2, AlertCircle, Languages, X, Pill } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface PrescriptionSummaryProps {
@@ -35,6 +34,7 @@ interface SummaryState {
   precautions?: string[];
   language?: string;
   aiPowered?: boolean;
+  aiWarning?: string;
 }
 
 const toFriendlySummaryError = (message: string) => {
@@ -176,7 +176,16 @@ export const PrescriptionAISummary = ({
         followUpRecommendations,
         selectedLanguage
       );
-      
+
+      // Do not show predefined/rule-based fallback in this screen.
+      // If live Gemini is unavailable, show a clear error instead.
+      if (result?.aiPowered === false) {
+        throw new Error(
+          result?.aiWarning ||
+          'Live Gemini summary is unavailable right now. Please retry when quota resets.'
+        );
+      }
+
       setSummaryData({...result, language: selectedLanguage});
       setExpanded(true);
       toast({

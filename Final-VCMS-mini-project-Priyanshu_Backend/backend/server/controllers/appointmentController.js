@@ -1,4 +1,5 @@
 const Appointment = require("../models/Appointment");
+const DoctorReview = require("../models/DoctorReview");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
 const socketHandler = require('../utils/socketHandler');
@@ -188,9 +189,25 @@ const getAppointments = async (req, res) => {
       .limit(parseInt(limit))
       .sort({ date: -1, time: -1 });
 
+    const appointmentIds = appointments.map((appointment) => appointment._id).filter(Boolean);
+    const reviews = appointmentIds.length
+      ? await DoctorReview.find({ appointmentId: { $in: appointmentIds } }).select('appointmentId').lean()
+      : [];
+    const reviewedAppointmentIds = new Set(
+      reviews.map((review) => review.appointmentId?.toString()).filter(Boolean)
+    );
+
+    const normalizedAppointments = appointments.map((appointment) => {
+      const appointmentObj = appointment.toObject();
+      return {
+        ...appointmentObj,
+        reviewSubmitted: reviewedAppointmentIds.has(appointment._id.toString()),
+      };
+    });
+
     res.json({
       success: true,
-      appointments,
+      appointments: normalizedAppointments,
       pagination: {
         total,
         page: parseInt(page),

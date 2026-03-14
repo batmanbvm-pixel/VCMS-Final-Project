@@ -22,6 +22,7 @@ interface ReportAnalysis {
     sideEffects?: string[];
     precautions?: string[];
     aiPowered?: boolean;
+    aiWarning?: string;
   };
   isMedical: boolean;
   analyzedAt: string;
@@ -34,26 +35,6 @@ interface QueueItem {
   error?: string;
   result?: ReportAnalysis;
 }
-
-// Heuristic: check if extracted text looks like medical content
-const isMedicalContent = (text: string): boolean => {
-  const t = text.toLowerCase();
-  const medicalKeywords = [
-    "patient", "diagnosis", "prescription", "mg", "dosage", "doctor", "dr.",
-    "hospital", "clinic", "blood", "test", "report", "lab", "result",
-    "hemoglobin", "glucose", "cholesterol", "bp", "ecg", "mri", "ct scan",
-    "x-ray", "ultrasound", "biopsy", "symptom", "treatment", "medicine",
-    "tablet", "injection", "surgery", "medical", "health", "disease",
-    "infection", "inflammation", "fever", "pain", "weight", "height", "bmi",
-    "platelet", "wbc", "rbc", "urine", "serum", "creatinine", "thyroid",
-    "मरीज", "डॉक्टर", "दवा", "रिपोर्ट", "निदान", "जांच",
-    "દર્દી", "ડૉક્ટર", "દવા", "રિપોર્ટ", "નિદાન", "ટેસ્ટ",
-  ];
-  const matchCount = medicalKeywords.filter((kw) => t.includes(kw)).length;
-  const hasMedicalUnits = /(\d+\s?(mg|ml|mmhg|g\/dl|mmol|mcg|iu))/i.test(t);
-  const hasPrescriptionPattern = /(dosage|frequency|duration|tablet|capsule|rx|medicine)/i.test(t);
-  return matchCount >= 2 || hasMedicalUnits || hasPrescriptionPattern;
-};
 
 const conciseText = (value = "", maxSentences = 3): string => {
   const sentences = String(value || "")
@@ -207,54 +188,108 @@ export const MedicalReportAnalyzer = () => {
 
       // Mark extracting
       setQueue((prev) => prev.map((q, idx) => idx === i ? { ...q, status: "extracting" } : q));
+      setOverallProgress((prev) => Math.max(prev, Math.min(90, progressPercent + 10)));
+
+      let waitProgressTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
+        setOverallProgress((prev) => Math.min(92, prev + 2));
+      }, 1200);
 
       try {
-        const extractedText = await geminiService.extractTextFromImage(item.file, selectedLanguage);
+        // Mark analyzing
+        setQueue((prev) => prev.map((q, idx) => idx === i ? { ...q, status: "analyzing" } : q));
 
-        if (!extractedText || extractedText.trim().length < 50) {
-          setQueue((prev) => prev.filter((_, idx) => idx !== i));
-          toast({
-            title: `${item.file.name} removed`,
-            description: "No OCR text detected. Please upload a clearer report image/PDF.",
-            variant: "destructive",
-          });
+        const analysisResult = await geminiService.analyzeMedicalDocument(item.file);
+
+        if (analysisResult?.status === "ocr_failed") {
+          if (waitProgressTimer) {
+            clearInterval(waitProgressTimer);
+            waitProgressTimer = null;
+          }
+          const ocrMessage = analysisResult?.message || "No OCR text detected. Please upload a clearer report image/PDF.";
+          setQueue((prev) => prev.map((q, idx) => idx === i ? { ...q, status: "error", error: ocrMessage } : q));
+          toast({ title: "OCR failed", description: ocrMessage, variant: "destructive" });
           const completePercent = Math.min(100, Math.max(0, Math.round(((i + 1) / totalItems) * 100)));
           setOverallProgress(completePercent);
           continue;
         }
 
-        // Mark analyzing
-        setQueue((prev) => prev.map((q, idx) => idx === i ? { ...q, status: "analyzing" } : q));
+        if (analysisResult?.status === "non_medical") {
+          if (waitProgressTimer) {
+            clearInterval(waitProgressTimer);
+            waitProgressTimer = null;
+          }
+          const nonMedicalMessage = analysisResult?.message || "This document is not related to medical reports.";
+          setQueue((prev) => prev.map((q, idx) => idx === i ? { ...q, status: "error", error: nonMedicalMessage } : q));
+          toast({ title: "Non-medical document", description: nonMedicalMessage, variant: "destructive" });
+          const completePercent = Math.min(100, Math.max(0, Math.round(((i + 1) / totalItems) * 100)));
+          setOverallProgress(completePercent);
+          continue;
+        }
 
-        const analysisResult = await geminiService.analyzeReport(extractedText, selectedLanguage);
+        if (analysisResult?.status !== "success") {
+          if (waitProgressTimer) {
+            clearInterval(waitProgressTimer);
+            waitProgressTimer = null;
+          }
+          throw new Error(analysisResult?.message || "Analysis failed. Please try again.");
+        }
 
-        const summaryText = String(analysisResult?.summary || "");
-        const nonMedicalPattern = /non-medical document detected|does not appear to be a medical document|no medical content detected/i;
-        const backendMarkedNonMedical = nonMedicalPattern.test(summaryText) ||
-          (Array.isArray(analysisResult?.keyPoints) && analysisResult.keyPoints.some((p) => nonMedicalPattern.test(String(p || ""))));
+        if (waitProgressTimer) {
+          clearInterval(waitProgressTimer);
+          waitProgressTimer = null;
+        }
 
-        const medical = typeof (analysisResult as any)?.isMedical === "boolean"
-          ? Boolean((analysisResult as any).isMedical)
-          : (isMedicalContent(extractedText) || !backendMarkedNonMedical);
+        const extractedText = String(analysisResult?.ocr_extracted_text || "");
+        const overviewPoints = Array.isArray(analysisResult?.summary?.overview_points)
+          ? conciseList(analysisResult.summary.overview_points.filter(Boolean), 6, 1)
+          : [];
+        const alertPoints = Array.isArray(analysisResult?.alerts)
+          ? conciseList(
+              analysisResult.alerts
+                .map((a: any) => `${a?.emoji || ""} ${a?.title || ""} ${a?.description || ""}`.trim())
+                .filter(Boolean),
+              4,
+              1
+            )
+          : [];
+        const followupSteps = Array.isArray(analysisResult?.followup?.repeat_tests)
+          ? conciseList(analysisResult.followup.repeat_tests.filter(Boolean), 4, 1)
+          : [];
+        const emergencySigns = Array.isArray(analysisResult?.followup?.emergency_signs)
+          ? conciseList(analysisResult.followup.emergency_signs.filter(Boolean), 5, 1)
+          : [];
 
-        const detailedSteps = normalizeStepContent(analysisResult?.detailedInstructions || "", selectedLanguage);
+        const detailedSteps = normalizeStepContent(followupSteps.join("\n"), selectedLanguage);
+        const summaryFromOverview = overviewPoints[0]
+          || analysisResult?.overview?.diagnosis
+          || analysisResult?.message
+          || "Medical document analyzed successfully.";
 
         const normalizedAnalysis = {
-          summary: conciseText((analysisResult?.summary || "No summary generated. Please review extracted text."), 3),
-          keyPoints: Array.isArray(analysisResult?.keyPoints)
-            ? conciseList(analysisResult.keyPoints.filter(Boolean), 6, 2)
-            : [],
-          recommendations: Array.isArray(analysisResult?.recommendations)
-            ? conciseList(analysisResult.recommendations.filter(Boolean), 5, 2)
-            : [],
+          summary: conciseText(summaryFromOverview, 3),
+          keyPoints: [...overviewPoints.slice(1), ...alertPoints].slice(0, 6),
+          recommendations: conciseList([...followupSteps, ...emergencySigns], 6, 2),
           detailedInstructions: detailedSteps.join("\n"),
-          sideEffects: Array.isArray(analysisResult?.sideEffects)
-            ? conciseList(analysisResult.sideEffects.filter(Boolean), 5, 1)
+          sideEffects: Array.isArray(analysisResult?.medicines)
+            ? conciseList(
+                analysisResult.medicines
+                  .flatMap((m: any) => Array.isArray(m?.side_effects) ? m.side_effects : [])
+                  .filter(Boolean),
+                5,
+                1
+              )
             : [],
-          precautions: Array.isArray(analysisResult?.precautions)
-            ? conciseList(analysisResult.precautions.filter(Boolean), 5, 1)
+          precautions: Array.isArray(analysisResult?.medicines)
+            ? conciseList(
+                analysisResult.medicines
+                  .flatMap((m: any) => Array.isArray(m?.what_to_avoid) ? m.what_to_avoid : [])
+                  .filter(Boolean),
+                5,
+                1
+              )
             : [],
           aiPowered: analysisResult?.aiPowered,
+          aiWarning: analysisResult?.aiWarning,
         };
 
         const result: ReportAnalysis = {
@@ -263,7 +298,7 @@ export const MedicalReportAnalyzer = () => {
           sourceFile: item.file,
           extractedText,
           analysis: normalizedAnalysis,
-          isMedical: medical,
+          isMedical: true,
           analyzedAt: new Date().toLocaleString(),
           language: selectedLanguage,
         };
@@ -279,6 +314,10 @@ export const MedicalReportAnalyzer = () => {
         setOverallProgress(completePercent);
 
       } catch (err: any) {
+        if (waitProgressTimer) {
+          clearInterval(waitProgressTimer);
+          waitProgressTimer = null;
+        }
         setQueue((prev) => prev.map((q, idx) => idx === i
           ? { ...q, status: "error", error: err.message || "Analysis failed." }
           : q));
@@ -485,6 +524,18 @@ export const MedicalReportAnalyzer = () => {
 
         {showAnalysisSections && (
           <>
+            {result.analysis.aiPowered === false && (
+              <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-bold">Live Gemini analysis unavailable</p>
+                  <p className="mt-1">
+                    {result.analysis.aiWarning || "Showing rule-based fallback output. Check Gemini quota/billing and try again."}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-lg border border-sky-100 p-3">
               <h4 className="text-sm font-bold text-sky-700 mb-2">📋 What this report is about</h4>
               <p className={`text-sm leading-relaxed text-slate-700 ${selectedLanguage === 'gujarati' || selectedLanguage === 'hindi' ? 'font-semibold' : ''}`}>

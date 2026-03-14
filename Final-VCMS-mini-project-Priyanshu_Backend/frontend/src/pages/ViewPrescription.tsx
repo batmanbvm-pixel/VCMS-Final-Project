@@ -325,7 +325,7 @@ const ViewPrescription = () => {
                   className="border-sky-200 text-sky-600 hover:bg-sky-50"
                 />
               )}
-              {role === "doctor" && (
+              {role === "doctor" && prescription.status === "draft" && (
                 <Button variant="outline" size="sm" className="gap-2 transition-all duration-200 hover:scale-105" onClick={() => navigate(`/create-prescription/${prescription.appointmentId?._id || prescription.appointmentId}`)}>
                   <FileText className="h-4 w-4" /> Update Prescription
                 </Button>

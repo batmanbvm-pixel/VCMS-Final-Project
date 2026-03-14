@@ -346,6 +346,13 @@ const getUserSessionInfo = (userId) => {
 };
 
 /**
+ * ✅ NEW: Get userId from socketId (reverse lookup)
+ */
+const getUserIdBySocket = (socketId) => {
+  return socketUserMap.get(socketId) || null;
+};
+
+/**
  * ✅ NEW: Clear user session on logout
  */
 const clearUserSession = (userId) => {
@@ -377,4 +384,5 @@ module.exports = {
   emitPrescriptionIssued,
   getUserSessionInfo,
   clearUserSession,
+  getUserIdBySocket,
 };

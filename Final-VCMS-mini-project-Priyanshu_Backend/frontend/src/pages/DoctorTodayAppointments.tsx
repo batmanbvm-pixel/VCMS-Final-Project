@@ -107,6 +107,23 @@ const DoctorTodayAppointments = () => {
     }
   };
 
+  const getRxStatusLabel = (status?: string) => {
+    const normalized = String(status || "draft").toLowerCase();
+    if (normalized === "draft") return "Draft Saved";
+    if (normalized === "issued") return "Prescription Issued";
+    if (normalized === "viewed") return "Viewed by Patient";
+    if (normalized === "picked_up") return "Picked Up";
+    if (normalized === "cancelled") return "Cancelled";
+    return "Prescription Added";
+  };
+
+  const getRxStatusStyles = (status?: string) => {
+    const normalized = String(status || "draft").toLowerCase();
+    if (normalized === "draft") return "bg-amber-50 border-amber-200 text-amber-700";
+    if (normalized === "cancelled") return "bg-red-50 border-red-200 text-red-700";
+    return "bg-emerald-50 border-emerald-200 text-emerald-700";
+  };
+
   const renderActionButtons = (apt: any) => {
     const appointmentId = apt._id || apt.id;
     const statusLower = normalizeStatus(apt.status);
@@ -184,16 +201,32 @@ const DoctorTodayAppointments = () => {
     }
 
     if (statusLower === "completed") {
+      const rxStatus = String(rx?.status || "").toLowerCase();
       return (
         <div className="flex flex-wrap gap-2 justify-end">
-          <Button 
-            size="sm" 
-            variant="outline" 
-            className="h-8 gap-1.5 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 shadow-sm font-medium" 
-            onClick={() => navigate(`/create-prescription/${appointmentId}`)}
-          >
-            <FilePen className="h-3.5 w-3.5" /> {rx ? "Edit Prescription" : "Write Prescription"}
-          </Button>
+          {!rx ? (
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-8 gap-1.5 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 shadow-sm font-medium" 
+              onClick={() => navigate(`/create-prescription/${appointmentId}`)}
+            >
+              <FilePen className="h-3.5 w-3.5" /> Write Prescription
+            </Button>
+          ) : rxStatus === "draft" ? (
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-8 gap-1.5 bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100 shadow-sm font-medium" 
+              onClick={() => navigate(`/create-prescription/${appointmentId}`)}
+            >
+              <FilePen className="h-3.5 w-3.5" /> Edit Draft
+            </Button>
+          ) : (
+            <div className={`inline-flex items-center h-8 gap-1.5 px-2.5 rounded-md border ${getRxStatusStyles(rx?.status)}`}>
+              <span className="text-xs font-medium">{getRxStatusLabel(rx?.status)}</span>
+            </div>
+          )}
         </div>
       );
     }
@@ -218,23 +251,24 @@ const DoctorTodayAppointments = () => {
       <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
       <Card className="border-slate-200 shadow-sm bg-white rounded-xl overflow-hidden">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
+          <div className="overflow-hidden">
+            <Table className="w-full table-fixed">
               <TableHeader>
                 <TableRow className="bg-slate-50 hover:bg-slate-50">
-                  <TableHead className="min-w-[220px]">Patient</TableHead>
-                  <TableHead className="min-w-[160px]">Schedule</TableHead>
-                  <TableHead className="min-w-[140px]">Specialization</TableHead>
-                  <TableHead className="min-w-[110px]">Status</TableHead>
-                  <TableHead className="min-w-[140px]">Medical History</TableHead>
-                  <TableHead className="min-w-[140px]">View Prescription</TableHead>
-                  <TableHead className="text-right min-w-[220px]">Actions</TableHead>
+                  <TableHead className="w-[23%]">Patient</TableHead>
+                  <TableHead className="w-[11%]">Schedule</TableHead>
+                  <TableHead className="w-[18%]">Diagnosis</TableHead>
+                  <TableHead className="w-[10%]">Status</TableHead>
+                  <TableHead className="w-[10%] text-center">Medical History</TableHead>
+                  <TableHead className="w-[14%] text-center">Prescription</TableHead>
+                  <TableHead className="text-right w-[14%]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {list.map((apt: any) => {
                   const appointmentId = apt._id || apt.id;
                   const rx = getPrescriptionByAppointment(appointmentId);
+                  const diagnosisText = (rx?.diagnosis || apt?.symptoms || "—").toString().trim() || "—";
                   return (
                     <TableRow key={appointmentId} className="hover:bg-slate-50/60">
                       <TableCell>
@@ -242,9 +276,9 @@ const DoctorTodayAppointments = () => {
                           <div className="h-9 w-9 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
                             <User className="h-5 w-5 text-sky-600" />
                           </div>
-                          <div>
-                            <div className="font-medium text-slate-900">{capitalizeName(apt.patientName)}</div>
-                            <div className="text-xs text-slate-600 mt-0.5">Age: {apt.patientAge || "—"} • {apt.patientMedicalHistory || "No history"}</div>
+                          <div className="min-w-0">
+                            <div className="font-medium text-slate-900 truncate">{capitalizeName(apt.patientName)}</div>
+                            <div className="text-xs text-slate-600 mt-0.5 truncate">Age: {apt.patientAge || "—"} • {apt.patientMedicalHistory || "No history"}</div>
                           </div>
                         </div>
                       </TableCell>
@@ -252,24 +286,31 @@ const DoctorTodayAppointments = () => {
                         <div className="text-sm text-slate-900">{apt.date}</div>
                         <div className="text-xs text-slate-600">{apt.time}</div>
                       </TableCell>
-                      <TableCell className="text-sm text-slate-700">{apt.specialization || "—"}</TableCell>
+                      <TableCell>
+                        <div className="text-sm text-slate-800 truncate" title={diagnosisText}>
+                          {diagnosisText}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusColor(apt.status)}`}>{apt.status}</span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         {apt.patientId ? (
-                          <PatientMedicalHistoryButton
-                            patientId={apt.patientId}
-                            patientName={apt.patientName}
-                            variant="outline"
-                            size="sm"
-                            className="h-8 bg-sky-100 border-sky-200 text-sky-700 hover:bg-sky-200"
-                          />
+                          <div className="flex justify-center">
+                            <PatientMedicalHistoryButton
+                              patientId={apt.patientId}
+                              patientName={apt.patientName}
+                              variant="outline"
+                              size="icon"
+                              showLabel={false}
+                              className="h-8 w-8 p-0 bg-sky-100 border-sky-200 text-sky-700 hover:bg-sky-200"
+                            />
+                          </div>
                         ) : (
                           <span className="text-xs text-slate-500">—</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         {rx ? (
                           <Button
                             size="sm"

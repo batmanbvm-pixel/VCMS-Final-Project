@@ -191,7 +191,7 @@ const viewPrescription = async (req, res) => {
       return res.status(403).json({ message: 'Forbidden' });
     }
 
-    if (prescription.status === 'issued' && !prescription.viewedAt) {
+    if (req.user.role === 'patient' && prescription.status === 'issued' && !prescription.viewedAt) {
       prescription.status = 'viewed';
       prescription.viewedAt = new Date();
       prescription.lastModifiedBy = req.user._id;
