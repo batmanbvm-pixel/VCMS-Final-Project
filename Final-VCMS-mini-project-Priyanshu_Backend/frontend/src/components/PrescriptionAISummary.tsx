@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +36,60 @@ interface SummaryState {
   aiPowered?: boolean;
   aiWarning?: string;
 }
+
+const isGenericSummary = (value = "") => {
+  const text = String(value || "").toLowerCase();
+  return [
+    "medical document analyzed",
+    "please review",
+    "follow your doctor",
+    "summary generated",
+  ].some((p) => text.includes(p));
+};
+
+const buildPersonalizedPrescriptionFallback = (
+  medications: any[],
+  diagnosis: string,
+  treatmentPlan: string,
+  followUpRecommendations: string,
+  language: string
+) => {
+  const meds = Array.isArray(medications) ? medications.filter(Boolean) : [];
+  const medLines = meds.slice(0, 6).map((m) => {
+    const name = m?.name || 'Medicine';
+    const dosage = m?.dosage ? ` ${m.dosage}` : '';
+    const frequency = m?.frequency ? `, ${m.frequency}` : '';
+    const duration = m?.duration ? ` for ${m.duration}` : '';
+    return `💊 ${name}${dosage}${frequency}${duration}`.trim();
+  });
+
+  const summary = diagnosis
+    ? `This prescription is for ${diagnosis}. ${meds.length ? `It includes ${meds.length} medicine${meds.length > 1 ? 's' : ''} with specific timing and duration.` : 'Please follow your doctor instructions carefully.'}`
+    : `This prescription includes ${meds.length || 'multiple'} medicine instructions. Follow exact dosage and timing for best recovery.`;
+
+  const keyPoints = medLines.length ? medLines : [
+    '💊 Follow exact dosage and timing written in prescription.',
+    '🕒 Do not skip doses or stop medicines early without doctor advice.',
+  ];
+
+  const recommendations = [
+    followUpRecommendations ? `📅 Follow-up: ${followUpRecommendations}` : '📅 Schedule follow-up visit as advised by your doctor.',
+    treatmentPlan ? `🩺 Treatment plan: ${treatmentPlan}` : '🩺 Continue treatment plan exactly as prescribed.',
+    '⚠️ Contact doctor immediately if severe side effects appear.',
+  ].filter(Boolean);
+
+  const detailedInstructions = medLines.length
+    ? medLines.map((line, idx) => `Step ${idx + 1}: ${line.replace(/^💊\s*/, '')}`).join('\n')
+    : 'Step 1: Take medicines exactly as prescribed by your doctor.';
+
+  return {
+    summary,
+    keyPoints,
+    recommendations,
+    detailedInstructions,
+    language,
+  };
+};
 
 const toFriendlySummaryError = (message: string) => {
   const lower = String(message || '').toLowerCase();
@@ -159,13 +213,17 @@ export const PrescriptionAISummary = ({
   const [expanded, setExpanded] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState("english");
+  const summaryInFlightRef = useRef(false);
   const friendlyError = summaryError ? toFriendlySummaryError(summaryError) : null;
   
   // Extract detailed medicine info
   const medicineDetails = summaryData ? extractMedicinesFromSummary(medications, summaryData.keyPoints) : [];
 
   const handleGenerateSummary = async () => {
+    if (summaryInFlightRef.current) return;
+
     try {
+      summaryInFlightRef.current = true;
       setLoading(true);
       setSummaryError(null);
       
@@ -186,7 +244,26 @@ export const PrescriptionAISummary = ({
         );
       }
 
-      setSummaryData({...result, language: selectedLanguage});
+      const normalizedResult = { ...result };
+      const noUsefulKeyPoints = !Array.isArray(normalizedResult.keyPoints) || normalizedResult.keyPoints.length === 0;
+      const noUsefulRecommendations = !Array.isArray(normalizedResult.recommendations) || normalizedResult.recommendations.length === 0;
+      if (!normalizedResult.summary || isGenericSummary(normalizedResult.summary) || noUsefulKeyPoints || noUsefulRecommendations) {
+        const fallback = buildPersonalizedPrescriptionFallback(
+          medications,
+          diagnosis,
+          treatmentPlan,
+          followUpRecommendations,
+          selectedLanguage
+        );
+        normalizedResult.summary = (!normalizedResult.summary || isGenericSummary(normalizedResult.summary))
+          ? fallback.summary
+          : normalizedResult.summary;
+        normalizedResult.keyPoints = noUsefulKeyPoints ? fallback.keyPoints : normalizedResult.keyPoints;
+        normalizedResult.recommendations = noUsefulRecommendations ? fallback.recommendations : normalizedResult.recommendations;
+        normalizedResult.detailedInstructions = normalizedResult.detailedInstructions || fallback.detailedInstructions;
+      }
+
+      setSummaryData({...normalizedResult, language: selectedLanguage});
       setExpanded(true);
       toast({
         title: "Summary Generated",
@@ -195,6 +272,7 @@ export const PrescriptionAISummary = ({
     } catch (error) {
       setSummaryError(error instanceof Error ? error.message : "Could not generate summary. Please try again.");
     } finally {
+      summaryInFlightRef.current = false;
       setLoading(false);
     }
   };

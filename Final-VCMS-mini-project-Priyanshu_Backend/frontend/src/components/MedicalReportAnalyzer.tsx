@@ -53,6 +53,20 @@ const conciseList = (items: string[] = [], maxItems = 6, sentenceLimit = 2): str
     .slice(0, maxItems);
 };
 
+const uniqueList = (items: string[] = []): string[] => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of (Array.isArray(items) ? items : [])) {
+    const item = String(raw || "").trim();
+    if (!item) continue;
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+};
+
 const normalizeStepContent = (value = "", language = "english"): string[] => {
   const text = String(value || "").trim();
   if (!text) return [];
@@ -73,10 +87,60 @@ const normalizeStepContent = (value = "", language = "english"): string[] => {
   return chunks.slice(0, 6).map((c, i) => `${stepWord} ${i + 1}: ${c}`);
 };
 
+const looksLikeEmbeddedAnalysisJson = (value = ""): boolean => {
+  const text = String(value || "").trim();
+  if (!text.startsWith("{")) return false;
+  return /"status"\s*:|"input_type"\s*:|"document_type"\s*:|"ocr_extracted_text"\s*:/i.test(text);
+};
+
+const tryParseEmbeddedAnalysisJson = (value = ""): any | null => {
+  const text = String(value || "").trim();
+  if (!looksLikeEmbeddedAnalysisJson(text)) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const isGenericSummaryText = (value = ""): boolean => {
+  const text = String(value || "").toLowerCase().trim();
+  if (!text) return true;
+  return [
+    "medical document analyzed successfully",
+    "your medical document has been analyzed",
+    "analysis complete",
+    "please review",
+    "for informational purposes",
+  ].some((p) => text.includes(p));
+};
+
+const extractReadableHighlightsFromText = (text = ""): string[] => {
+  return String(text || "")
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => l.length >= 4)
+    .filter((l) => !/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l))
+    .filter((l) => !/^localhost:/i.test(l))
+    .filter((l) => !/^https?:\/\//i.test(l))
+    .filter((l) => !/^draft$/i.test(l))
+    .filter((l) => !/^step\s*\d+/i.test(l))
+    .slice(0, 8);
+};
+
+const isUsefulValue = (v: any) => {
+  const s = String(v || "").trim();
+  if (!s) return false;
+  return !/^(not mentioned|not applicable|n\/a|unknown)$/i.test(s);
+};
+
 export const MedicalReportAnalyzer = () => {
   const MAX_FILES = 2;
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const analyzeInFlightRef = useRef(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [processing, setProcessing] = useState(false);
   const [overallProgress, setOverallProgress] = useState(0);
@@ -167,23 +231,27 @@ export const MedicalReportAnalyzer = () => {
   }, [previewFile]);
 
   const analyzeAll = async () => {
-    const candidates = queue.filter((q) => q.status === "pending" || q.status === "error" || q.status === "done");
+    if (analyzeInFlightRef.current) return;
+
+    const candidates = queue.filter((q) => q.status === "pending" || q.status === "error");
     if (!candidates.length) {
       toast({ title: "Nothing to analyze", description: "Add files first." });
       return;
     }
 
+    analyzeInFlightRef.current = true;
     setProcessing(true);
     setOverallProgress(0);
     let lastResult: ReportAnalysis | null = null;
-    const totalItems = queue.length;
+    const totalItems = candidates.length;
+    let completedItems = 0;
 
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
-      if (item.status !== "pending" && item.status !== "error" && item.status !== "done") continue;
+      if (item.status !== "pending" && item.status !== "error") continue;
 
       // Update progress percentage
-      const progressPercent = Math.min(99, Math.max(1, Math.round((i / totalItems) * 100)));
+      const progressPercent = Math.min(99, Math.max(1, Math.round((completedItems / totalItems) * 100)));
       setOverallProgress(progressPercent);
 
       // Mark extracting
@@ -208,7 +276,8 @@ export const MedicalReportAnalyzer = () => {
           const ocrMessage = analysisResult?.message || "No OCR text detected. Please upload a clearer report image/PDF.";
           setQueue((prev) => prev.map((q, idx) => idx === i ? { ...q, status: "error", error: ocrMessage } : q));
           toast({ title: "OCR failed", description: ocrMessage, variant: "destructive" });
-          const completePercent = Math.min(100, Math.max(0, Math.round(((i + 1) / totalItems) * 100)));
+          completedItems += 1;
+          const completePercent = Math.min(100, Math.max(0, Math.round((completedItems / totalItems) * 100)));
           setOverallProgress(completePercent);
           continue;
         }
@@ -221,7 +290,8 @@ export const MedicalReportAnalyzer = () => {
           const nonMedicalMessage = analysisResult?.message || "This document is not related to medical reports.";
           setQueue((prev) => prev.map((q, idx) => idx === i ? { ...q, status: "error", error: nonMedicalMessage } : q));
           toast({ title: "Non-medical document", description: nonMedicalMessage, variant: "destructive" });
-          const completePercent = Math.min(100, Math.max(0, Math.round(((i + 1) / totalItems) * 100)));
+          completedItems += 1;
+          const completePercent = Math.min(100, Math.max(0, Math.round((completedItems / totalItems) * 100)));
           setOverallProgress(completePercent);
           continue;
         }
@@ -239,58 +309,197 @@ export const MedicalReportAnalyzer = () => {
           waitProgressTimer = null;
         }
 
-        const extractedText = String(analysisResult?.ocr_extracted_text || "");
-        const overviewPoints = Array.isArray(analysisResult?.summary?.overview_points)
-          ? conciseList(analysisResult.summary.overview_points.filter(Boolean), 6, 1)
+        const embeddedFromSummary = typeof analysisResult?.summary === "string"
+          ? tryParseEmbeddedAnalysisJson(analysisResult.summary)
+          : null;
+        const embeddedFromKeyPoint = Array.isArray(analysisResult?.keyPoints)
+          ? analysisResult.keyPoints.map((p: any) => tryParseEmbeddedAnalysisJson(String(p || ""))).find(Boolean)
+          : null;
+        const normalizedSource = (embeddedFromSummary || embeddedFromKeyPoint)
+          ? { ...analysisResult, ...(embeddedFromSummary || embeddedFromKeyPoint) }
+          : analysisResult;
+
+        const extractedText = String(normalizedSource?.ocr_extracted_text || "");
+        const overview = normalizedSource?.overview || {};
+        const medicines = Array.isArray(normalizedSource?.medicines) ? normalizedSource.medicines : [];
+        const labResults = Array.isArray(normalizedSource?.lab_results) ? normalizedSource.lab_results : [];
+        const overviewPoints = Array.isArray(normalizedSource?.summary?.overview_points)
+          ? conciseList(normalizedSource.summary.overview_points.filter(Boolean), 6, 1)
           : [];
-        const alertPoints = Array.isArray(analysisResult?.alerts)
+        const directKeyPoints = Array.isArray(normalizedSource?.keyPoints)
           ? conciseList(
-              analysisResult.alerts
+              normalizedSource.keyPoints
+                .filter(Boolean)
+                .map((v: any) => String(v || "").trim())
+                .filter((v: string) => !looksLikeEmbeddedAnalysisJson(v)),
+              6,
+              1
+            )
+          : [];
+        const directRecommendations = Array.isArray(normalizedSource?.recommendations)
+          ? conciseList(
+              normalizedSource.recommendations
+                .filter(Boolean)
+                .map((v: any) => String(v || "").trim())
+                .filter((v: string) => !looksLikeEmbeddedAnalysisJson(v)),
+              6,
+              2
+            )
+          : [];
+        const alertPoints = Array.isArray(normalizedSource?.alerts)
+          ? conciseList(
+              normalizedSource.alerts
                 .map((a: any) => `${a?.emoji || ""} ${a?.title || ""} ${a?.description || ""}`.trim())
                 .filter(Boolean),
               4,
               1
             )
           : [];
-        const followupSteps = Array.isArray(analysisResult?.followup?.repeat_tests)
-          ? conciseList(analysisResult.followup.repeat_tests.filter(Boolean), 4, 1)
+        const followupSteps = Array.isArray(normalizedSource?.followup?.repeat_tests)
+          ? conciseList(normalizedSource.followup.repeat_tests.filter(Boolean), 4, 1)
           : [];
-        const emergencySigns = Array.isArray(analysisResult?.followup?.emergency_signs)
-          ? conciseList(analysisResult.followup.emergency_signs.filter(Boolean), 5, 1)
+        const emergencySigns = Array.isArray(normalizedSource?.followup?.emergency_signs)
+          ? conciseList(normalizedSource.followup.emergency_signs.filter(Boolean), 5, 1)
           : [];
+
+        const medicineNames = medicines
+          .map((m: any) => String(m?.name || "").trim())
+          .filter(Boolean)
+          .slice(0, 3);
+
+        const medicineGuidance = medicines
+          .map((m: any) => {
+            const name = String(m?.name || "").trim();
+            if (!name) return "";
+            const dosage = String(m?.dosage || "").trim();
+            const frequency = String(m?.frequency || "").trim();
+            const duration = String(m?.duration || "").trim();
+            const parts = [dosage, frequency, duration].filter(Boolean).join(" • ");
+            return `💊 ${name}${parts ? ` — ${parts}` : ""}`;
+          })
+          .filter(Boolean)
+          .slice(0, 4);
+
+        const structuredKeyPoints = conciseList([
+          isUsefulValue(overview?.patient_name) ? `👤 Patient: ${overview.patient_name}` : "",
+          isUsefulValue(overview?.doctor_name) ? `👨‍⚕️ Doctor: ${overview.doctor_name}` : "",
+          isUsefulValue(overview?.hospital_or_lab) ? `🏥 Facility: ${overview.hospital_or_lab}` : "",
+          isUsefulValue(overview?.date) ? `📅 Report date: ${overview.date}` : "",
+          isUsefulValue(overview?.diagnosis) ? `🩺 Diagnosis/Reason: ${overview.diagnosis}` : "",
+          medicines.length > 0
+            ? `💊 Medicines detected: ${medicines.slice(0, 3).map((m: any) => m?.name).filter(Boolean).join(', ')}`
+            : "",
+          labResults.length > 0
+            ? `🧪 Lab parameters found: ${labResults.slice(0, 3).map((r: any) => r?.test_name).filter(Boolean).join(', ')}`
+            : "",
+        ].filter(Boolean), 6, 1);
+
+        const structuredRecommendations = conciseList([
+          isUsefulValue(normalizedSource?.followup?.next_visit) ? String(normalizedSource.followup.next_visit) : "",
+          ...((Array.isArray(normalizedSource?.followup?.repeat_tests) ? normalizedSource.followup.repeat_tests : []).slice(0, 3)),
+          ...(medicines.slice(0, 2).map((m: any) => {
+            const name = String(m?.name || '').trim();
+            const freq = String(m?.frequency || '').trim();
+            const timing = Array.isArray(m?.timing) ? m.timing.filter(Boolean).join(', ') : '';
+            const duration = String(m?.duration || '').trim();
+            if (!name) return '';
+            const parts = [freq, timing, duration].filter(Boolean).join(' • ');
+            return parts ? `💊 ${name}: ${parts}` : `💊 ${name}: follow prescribed schedule`;
+          })),
+        ].filter(Boolean), 6, 2);
 
         const detailedSteps = normalizeStepContent(followupSteps.join("\n"), selectedLanguage);
-        const summaryFromOverview = overviewPoints[0]
-          || analysisResult?.overview?.diagnosis
-          || analysisResult?.message
+        const summaryFromOverview = (
+          typeof normalizedSource?.summary === "string" &&
+          !looksLikeEmbeddedAnalysisJson(normalizedSource.summary) &&
+          !isGenericSummaryText(normalizedSource.summary)
+            ? conciseText(normalizedSource.summary, 3)
+            : ""
+        )
+          || overviewPoints[0]
+            || (isUsefulValue(overview?.diagnosis)
+              ? `This ${normalizedSource?.document_type === 'prescription' ? 'prescription' : 'medical report'} is mainly about ${overview.diagnosis}.`
+              : "")
+            || (medicines.length > 0
+              ? `This prescription contains ${medicines.length} medicine instruction${medicines.length > 1 ? 's' : ''}.`
+              : "")
+          || (Array.isArray(directKeyPoints) && directKeyPoints.length ? directKeyPoints[0] : "")
+          || normalizedSource?.overview?.diagnosis
+          || normalizedSource?.message
           || "Medical document analyzed successfully.";
 
+        const extractedHighlights = extractReadableHighlightsFromText(extractedText);
+        const keywordLines = extractedHighlights.filter((line) =>
+          /patient|doctor|medication|dosage|frequency|duration|instructions|treatment|clinic|hospital|report|health|tablet|mg|ml|twice|once|daily|days/i.test(line)
+        );
+        const fallbackTextKeyPoints = conciseList(
+          (keywordLines.length ? keywordLines : extractedHighlights.slice(0, 6)).map((line) => `• ${line}`),
+          6,
+          1
+        );
+
+        const mergedKeyPoints = [...structuredKeyPoints, ...overviewPoints.slice(1), ...directKeyPoints, ...alertPoints];
+        const mergedRecommendations = [...structuredRecommendations, ...directRecommendations, ...followupSteps, ...emergencySigns];
+
+        const medicineConversationSummary = medicineNames.length
+          ? `This looks like a prescription-focused report${isUsefulValue(overview?.diagnosis) ? ` for ${overview.diagnosis}` : ""}. I can see ${medicineNames.join(", ")} in your treatment. Please follow exact timing and dose, and monitor for side effects like stomach upset, dizziness, or allergy symptoms.`
+          : "";
+
         const normalizedAnalysis = {
-          summary: conciseText(summaryFromOverview, 3),
-          keyPoints: [...overviewPoints.slice(1), ...alertPoints].slice(0, 6),
-          recommendations: conciseList([...followupSteps, ...emergencySigns], 6, 2),
+          summary: conciseText(medicineConversationSummary || summaryFromOverview, 4),
+          keyPoints: uniqueList(medicineGuidance.length ? medicineGuidance : (mergedKeyPoints.length ? mergedKeyPoints : fallbackTextKeyPoints)).slice(0, 6),
+          recommendations: uniqueList(conciseList(mergedRecommendations, 6, 2)).slice(0, 6),
           detailedInstructions: detailedSteps.join("\n"),
-          sideEffects: Array.isArray(analysisResult?.medicines)
-            ? conciseList(
-                analysisResult.medicines
+          sideEffects: Array.isArray(normalizedSource?.medicines)
+            ? uniqueList(conciseList(
+                normalizedSource.medicines
                   .flatMap((m: any) => Array.isArray(m?.side_effects) ? m.side_effects : [])
                   .filter(Boolean),
                 5,
                 1
-              )
+              ))
             : [],
-          precautions: Array.isArray(analysisResult?.medicines)
-            ? conciseList(
-                analysisResult.medicines
+          precautions: Array.isArray(normalizedSource?.medicines)
+            ? uniqueList(conciseList(
+                normalizedSource.medicines
                   .flatMap((m: any) => Array.isArray(m?.what_to_avoid) ? m.what_to_avoid : [])
                   .filter(Boolean),
                 5,
                 1
-              )
+              ))
             : [],
-          aiPowered: analysisResult?.aiPowered,
-          aiWarning: analysisResult?.aiWarning,
+          aiPowered: normalizedSource?.aiPowered,
+          aiWarning: normalizedSource?.aiWarning,
         };
+
+        if ((!normalizedAnalysis.sideEffects || normalizedAnalysis.sideEffects.length === 0) && medicines.length > 0) {
+          normalizedAnalysis.sideEffects = uniqueList(conciseList([
+            '🤢 Mild nausea or stomach discomfort may occur with some medicines.',
+            '😵 You may feel dizziness or sleepiness after certain doses.',
+            '⚠️ Rash, swelling, breathing difficulty, or severe vomiting needs urgent medical help.',
+          ], 5, 1));
+        }
+
+        if ((!normalizedAnalysis.precautions || normalizedAnalysis.precautions.length === 0) && medicines.length > 0) {
+          normalizedAnalysis.precautions = uniqueList(conciseList([
+            '⛔ Do not skip doses or stop medicines early without doctor advice.',
+            '🍺 Avoid alcohol and self-medication while this prescription is active.',
+            '📞 If symptoms worsen or severe side effects appear, contact your doctor immediately.',
+          ], 5, 1));
+        }
+
+        if (!normalizedAnalysis.summary || isGenericSummaryText(normalizedAnalysis.summary)) {
+          const firstHighlight = extractedHighlights[0] || "This document appears to be a medical report.";
+          normalizedAnalysis.summary = conciseText(`📄 ${firstHighlight}`, 2);
+        }
+
+        if ((!normalizedAnalysis.recommendations || normalizedAnalysis.recommendations.length === 0) && extractedHighlights.length > 0) {
+          normalizedAnalysis.recommendations = conciseList([
+            '📅 Review this report with your doctor.',
+            '🧾 Keep this report for follow-up visits.',
+            '💊 Follow prescribed medicine and instructions exactly.',
+          ], 3, 1);
+        }
 
         const result: ReportAnalysis = {
           fileName: item.file.name,
@@ -310,7 +519,8 @@ export const MedicalReportAnalyzer = () => {
           ? { ...q, status: "done", result }
           : q));
 
-        const completePercent = Math.min(100, Math.max(0, Math.round(((i + 1) / totalItems) * 100)));
+        completedItems += 1;
+        const completePercent = Math.min(100, Math.max(0, Math.round((completedItems / totalItems) * 100)));
         setOverallProgress(completePercent);
 
       } catch (err: any) {
@@ -321,7 +531,8 @@ export const MedicalReportAnalyzer = () => {
         setQueue((prev) => prev.map((q, idx) => idx === i
           ? { ...q, status: "error", error: err.message || "Analysis failed." }
           : q));
-        const completePercent = Math.min(100, Math.max(0, Math.round(((i + 1) / totalItems) * 100)));
+        completedItems += 1;
+        const completePercent = Math.min(100, Math.max(0, Math.round((completedItems / totalItems) * 100)));
         setOverallProgress(completePercent);
       }
     }
@@ -343,6 +554,8 @@ export const MedicalReportAnalyzer = () => {
       setOverallProgress(0);
       toast({ title: "Analysis complete", description: "All reports processed." });
     }
+
+    analyzeInFlightRef.current = false;
   };
 
   const sanitizePdfText = (value?: string) => {
