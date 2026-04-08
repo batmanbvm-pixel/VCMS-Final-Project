@@ -132,10 +132,11 @@ export const geminiService = {
     }
   },
 
-  async analyzeMedicalDocument(documentFile: File): Promise<any> {
+  async analyzeMedicalDocument(documentFile: File, language: string = 'english'): Promise<any> {
     try {
       const formData = new FormData();
       formData.append('file', documentFile);
+      formData.append('language', language);
 
       const response = await api.post('/ai/analyze-medical-document', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },

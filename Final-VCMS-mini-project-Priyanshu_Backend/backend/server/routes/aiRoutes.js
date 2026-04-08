@@ -1157,20 +1157,8 @@ router.post('/summarize', protect, async (req, res) => {
 
     if (!hasGeminiKey()) {
       // No key configured — silently use rule-based fallback
-      console.warn('[Gemini] No key — using rule-based summarize fallback');
-      const fallback = type === 'prescription'
-        ? ruleBasedPrescriptionSummary(content, language)
-        : ruleBasedAnalysis(content, language);
-      return res.json({
-        summary: fallback.summary || '',
-        keyPoints: fallback.keyPoints || [],
-        recommendations: fallback.recommendations || [],
-        detailedInstructions: fallback.detailedInstructions || '',
-        sideEffects: fallback.sideEffects || [],
-        precautions: fallback.precautions || [],
-        aiPowered: false,
-        language,
-        aiWarning: '⚠️ AI not configured. Showing rule-based analysis.',
+      return res.status(503).json({
+        error: 'Gemini is not configured. Live AI summary is unavailable right now.',
       });
     }
 
@@ -1389,26 +1377,11 @@ Format your response as JSON:
 
     res.json(response);
   } catch (error) {
-    // Any Gemini/network failure — fall back to rule-based instead of crashing
-    console.warn('[Gemini] /summarize error, using rule-based fallback:', error.message);
-    try {
-      const fallback = type === 'prescription'
-        ? ruleBasedPrescriptionSummary(content, language)
-        : ruleBasedAnalysis(content, language);
-      return res.json({
-        summary: fallback.summary || '',
-        keyPoints: fallback.keyPoints || [],
-        recommendations: fallback.recommendations || [],
-        detailedInstructions: fallback.detailedInstructions || '',
-        sideEffects: fallback.sideEffects || [],
-        precautions: fallback.precautions || [],
-        aiPowered: false,
-        language,
-        aiWarning: '⚠️ AI unavailable. Showing rule-based analysis.',
-      });
-    } catch (fallbackErr) {
-      return res.status(500).json({ error: 'Could not process document. Please try again.', message: error.message });
-    }
+    console.warn('[Gemini] /summarize error:', error.message);
+    return res.status(503).json({
+      error: 'Live Gemini summary unavailable. Please try again later.',
+      message: error.message,
+    });
   }
 });
 
@@ -1812,6 +1785,10 @@ router.post('/analyze-medical-document', protect, upload.single('file'), async (
     }
 
     uploadedPath = req.file.path;
+    const requestedLanguage = String(req.body?.language || 'english').toLowerCase().trim();
+    const outputLanguage = ['english', 'hindi', 'gujarati'].includes(requestedLanguage)
+      ? requestedLanguage
+      : 'english';
     const inputType = req.file.mimetype === 'application/pdf' ? 'pdf' : 'image';
     let extractedText = '';
 
@@ -1879,11 +1856,10 @@ router.post('/analyze-medical-document', protect, upload.single('file'), async (
 
     if (hasGeminiKey()) {
       try {
-        analysisResult = await analyzeMedicalDocumentWithGemini(extractedText, documentType, inputType);
+        analysisResult = await analyzeMedicalDocumentWithGemini(extractedText, documentType, inputType, outputLanguage);
         aiPowered = true;
 
-        // Some model responses are syntactically valid JSON but semantically sparse.
-        // Enrich with rule-based structure so UI always has meaningful sections.
+        // Reject sparse or generic model output; do not replace it with static fallback.
         const summaryText = typeof analysisResult?.summary === 'string' ? analysisResult.summary.trim() : '';
         const hasSummaryText = summaryText.length > 20 && !/^\{[\s\S]*\}$/.test(summaryText);
         const hasOverviewPoints = Array.isArray(analysisResult?.summary?.overview_points)
@@ -1891,31 +1867,10 @@ router.post('/analyze-medical-document', protect, upload.single('file'), async (
         const hasKeyPoints = Array.isArray(analysisResult?.keyPoints) && analysisResult.keyPoints.some(Boolean);
 
         if (!hasSummaryText && !hasOverviewPoints && !hasKeyPoints) {
-          const enriched = analyzeMedicalDocumentRuleBased(extractedText, documentType, inputType);
-          analysisResult = {
-            ...enriched,
-            ...(analysisResult || {}),
-            overview: analysisResult?.overview || enriched.overview,
-            medicines: Array.isArray(analysisResult?.medicines) && analysisResult.medicines.length
-              ? analysisResult.medicines
-              : enriched.medicines,
-            lab_results: Array.isArray(analysisResult?.lab_results) && analysisResult.lab_results.length
-              ? analysisResult.lab_results
-              : enriched.lab_results,
-            alerts: Array.isArray(analysisResult?.alerts) && analysisResult.alerts.length
-              ? analysisResult.alerts
-              : enriched.alerts,
-            lifestyle: analysisResult?.lifestyle || enriched.lifestyle,
-            followup: analysisResult?.followup || enriched.followup,
-            radiology_findings: analysisResult?.radiology_findings || enriched.radiology_findings,
-            summary: analysisResult?.summary || enriched.summary,
-            keyPoints: Array.isArray(analysisResult?.keyPoints) && analysisResult.keyPoints.length
-              ? analysisResult.keyPoints
-              : (Array.isArray(enriched?.summary?.overview_points) ? enriched.summary.overview_points : []),
-            recommendations: Array.isArray(analysisResult?.recommendations) && analysisResult.recommendations.length
-              ? analysisResult.recommendations
-              : (Array.isArray(enriched?.followup?.emergency_signs) ? enriched.followup.emergency_signs.slice(0, 5) : []),
-          };
+          return res.status(502).json({
+            status: 'error',
+            message: 'Gemini returned a low-quality summary. Please retry with a clearer document.',
+          });
         }
       } catch (aiError) {
         const msg = String(aiError?.message || '');
@@ -1923,90 +1878,92 @@ router.post('/analyze-medical-document', protect, upload.single('file'), async (
         const isQuota   = /429|quota/i.test(msg);
         const isBusy    = /503|service unavailable/i.test(msg);
 
-        if (isRevoked) {
-          aiWarning = '⚠️ AI analysis unavailable (API keys revoked). Showing rule-based analysis instead.';
-          console.warn('[Gemini] All keys revoked — falling back to rule-based analysis');
-        } else if (isQuota) {
-          aiWarning = '⚠️ Tried all configured Gemini keys, but quota is exhausted for all of them. Showing rule-based analysis instead.';
-          console.warn('[Gemini] Quota exceeded — falling back to rule-based analysis');
-        } else if (isBusy) {
-          aiWarning = '⚠️ AI is busy right now. Showing rule-based analysis instead.';
-          console.warn('[Gemini] Service busy — falling back to rule-based analysis');
-        } else {
-          aiWarning = '⚠️ AI analysis unavailable. Showing rule-based analysis instead.';
-          console.warn('[Gemini] Error — falling back to rule-based analysis:', msg);
-        }
-
-        // Graceful fallback — never crash the upload
-        analysisResult = analyzeMedicalDocumentRuleBased(extractedText, documentType, inputType);
-        aiPowered = false;
+        console.warn('[Gemini] Medical analysis error:', msg);
+        return res.status(503).json({
+          status: 'error',
+          message: isRevoked
+            ? 'Gemini API key is revoked or invalid. Live AI analysis unavailable.'
+            : isQuota
+              ? 'Gemini quota is exhausted. Live AI analysis unavailable right now.'
+              : isBusy
+                ? 'Gemini is busy right now. Please retry shortly.'
+                : 'Live Gemini analysis unavailable. Please try again later.',
+        });
       }
     } else {
-      // No keys configured at all — use rule-based silently
-      console.warn('[Gemini] No API key configured — using rule-based analysis');
-      aiWarning = '⚠️ AI not configured. Showing rule-based analysis instead.';
-      analysisResult = analyzeMedicalDocumentRuleBased(extractedText, documentType, inputType);
-      aiPowered = false;
+      return res.status(503).json({
+        status: 'error',
+        message: 'Live Gemini analysis is not configured on the server.',
+      });
     }
 
     // Clean up uploaded file
     await fs.promises.unlink(uploadedPath).catch(() => {});
 
-    const baseline = analyzeMedicalDocumentRuleBased(extractedText, documentType, inputType);
     const rawSummary = analysisResult?.summary;
     const summaryText = typeof rawSummary === 'string' ? rawSummary.trim() : '';
     const summaryLooksJson = /^\{[\s\S]*\}$/.test(summaryText);
-    const aiOverviewPoints = Array.isArray(rawSummary?.overview_points)
-      ? rawSummary.overview_points.filter(Boolean)
-      : [];
-    const fallbackOverviewPoints = Array.isArray(baseline?.summary?.overview_points)
-      ? baseline.summary.overview_points.filter(Boolean)
-      : [];
-    const safeOverviewPoints = aiOverviewPoints.length ? aiOverviewPoints : fallbackOverviewPoints;
-
-    const aiKeyPoints = Array.isArray(analysisResult?.keyPoints)
-      ? analysisResult.keyPoints.filter(Boolean)
-      : [];
     const isLowQualityPoint = (value = '') => {
-      const t = String(value || '').trim().toLowerCase();
+      const t = String(value || '')
+        .replace(/[•●▪◦◆▶️👉📌]/g, ' ')
+        .replace(/[\u{1F300}-\u{1FAFF}]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
       if (!t) return true;
       if (t.length <= 3) return true;
+      if (/(^|\s)(not mentioned|not applicable|n\/a|unknown)(\s|$)/i.test(t)) return true;
+      if (/this appears to be a medical document|this appears to be a prescription|please review detailed findings|consult your doctor for interpretation/i.test(t)) return true;
       if (/^(patient|doctor|medication|dosage|frequency|duration|instructions|draft)$/i.test(t)) return true;
       if (/^⚕\s*mediconnect|virtual clinic$/i.test(t)) return true;
       return false;
     };
+    const aiOverviewPoints = Array.isArray(rawSummary?.overview_points)
+      ? rawSummary.overview_points.filter(Boolean)
+      : (typeof rawSummary === 'string'
+        ? rawSummary
+          .split(/(?<=[.!?])\s+|\n+/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 6)
+        : []);
+    const safeOverviewPoints = aiOverviewPoints.filter((p) => !isLowQualityPoint(p));
+
+    const aiKeyPoints = Array.isArray(analysisResult?.keyPoints)
+      ? analysisResult.keyPoints.filter(Boolean)
+      : [];
     const hasUsefulAiKeyPoints = aiKeyPoints.some((p) => !isLowQualityPoint(p));
     const safeKeyPoints = hasUsefulAiKeyPoints ? aiKeyPoints : safeOverviewPoints;
 
     const aiRecommendations = Array.isArray(analysisResult?.recommendations)
       ? analysisResult.recommendations.filter(Boolean)
       : [];
-    const fallbackRecommendations = Array.isArray(baseline?.recommendations) && baseline.recommendations.length
-      ? baseline.recommendations.filter(Boolean).slice(0, 6)
-      : (Array.isArray(baseline?.followup?.emergency_signs)
-          ? baseline.followup.emergency_signs.filter(Boolean).slice(0, 6)
-          : []);
-    const safeRecommendations = aiRecommendations.length ? aiRecommendations : fallbackRecommendations;
+    const aiFollowupRecommendations = Array.isArray(analysisResult?.followup?.repeat_tests)
+      ? analysisResult.followup.repeat_tests.filter(Boolean)
+      : [];
+    const safeRecommendations = aiRecommendations.length
+      ? aiRecommendations
+      : aiFollowupRecommendations.slice(0, 6);
 
     const safeOverview = {
-      hospital_or_lab: analysisResult?.overview?.hospital_or_lab || baseline?.overview?.hospital_or_lab || 'Not mentioned',
-      doctor_name: analysisResult?.overview?.doctor_name || baseline?.overview?.doctor_name || 'Not mentioned',
-      patient_name: analysisResult?.overview?.patient_name || baseline?.overview?.patient_name || 'Not mentioned',
-      patient_age: analysisResult?.overview?.patient_age || baseline?.overview?.patient_age || 'Not mentioned',
-      date: analysisResult?.overview?.date || baseline?.overview?.date || 'Not mentioned',
-      diagnosis: analysisResult?.overview?.diagnosis || baseline?.overview?.diagnosis || 'Not mentioned in document',
+      hospital_or_lab: analysisResult?.overview?.hospital_or_lab || 'Not mentioned',
+      doctor_name: analysisResult?.overview?.doctor_name || 'Not mentioned',
+      patient_name: analysisResult?.overview?.patient_name || 'Not mentioned',
+      patient_age: analysisResult?.overview?.patient_age || 'Not mentioned',
+      date: analysisResult?.overview?.date || 'Not mentioned',
+      diagnosis: analysisResult?.overview?.diagnosis || 'Not mentioned in document',
     };
 
     const safeMedicines = Array.isArray(analysisResult?.medicines) && analysisResult.medicines.length
       ? analysisResult.medicines
-      : (Array.isArray(baseline?.medicines) ? baseline.medicines : []);
+      : [];
 
     const safeLabResultsFull = Array.isArray(analysisResult?.lab_results) && analysisResult.lab_results.length
       ? analysisResult.lab_results
-      : (Array.isArray(baseline?.lab_results) ? baseline.lab_results : []);
+      : [];
 
-    const safeFollowup = analysisResult?.followup || baseline?.followup || {
-      next_visit: '📅 Follow up with your doctor as recommended',
+    const safeFollowup = analysisResult?.followup || {
+      next_visit: 'Not mentioned',
       repeat_tests: [],
       emergency_signs: [],
     };
@@ -2022,41 +1979,38 @@ router.post('/analyze-medical-document', protect, upload.single('file'), async (
       ].some((p) => s.includes(p));
     };
 
-    const medNamesForSummary = safeMedicines.map((m) => String(m?.name || '').trim()).filter(Boolean).slice(0, 3);
-    const conversationalSummary = medNamesForSummary.length
-      ? `This prescription is mainly for ${safeOverview.diagnosis || 'your current condition'}. Medicines noted are ${medNamesForSummary.join(', ')}. Please follow dose and timing exactly, and watch for side effects like stomach upset, dizziness, rash, or unusual weakness.`
-      : `This medical report is for ${safeOverview.diagnosis || 'your current condition'}. Review this with your doctor and follow the documented treatment plan carefully.`;
+    const normalizedSummary = (!summaryLooksJson && summaryText && !isGenericSummaryText(summaryText))
+      ? summaryText
+      : (safeOverviewPoints[0]
+          || safeKeyPoints.find((p) => !isLowQualityPoint(p))
+          || safeRecommendations[0]
+          || '');
 
-    let safeSummary;
-    if (summaryText && !summaryLooksJson && !isGenericSummaryText(summaryText)) {
-      safeSummary = summaryText;
-    } else if (rawSummary && typeof rawSummary === 'object') {
-      safeSummary = {
-        ...rawSummary,
-        overview_points: safeOverviewPoints,
-      };
-    } else {
-      safeSummary = conversationalSummary;
+    if (!normalizedSummary && safeKeyPoints.length === 0 && safeRecommendations.length === 0) {
+      return res.status(502).json({
+        status: 'error',
+        message: 'Gemini returned insufficient structured content. Please retry.',
+      });
     }
 
     // Ensure status is set even if Gemini omitted it
     const finalResult = {
       status: 'success',
       ...(analysisResult || {}),
+      summary: normalizedSummary,
+      keyPoints: safeKeyPoints,
+      recommendations: safeRecommendations,
+      overview: safeOverview,
+      medicines: safeMedicines,
+      lab_results: safeLabResultsFull,
+      followup: safeFollowup,
       // Always return raw OCR text and core metadata from server-side extraction
       // even if model output is partial/missing these fields.
       ocr_extracted_text: String(analysisResult?.ocr_extracted_text || extractedText || ''),
       input_type: analysisResult?.input_type || inputType,
       document_type: analysisResult?.document_type || documentType,
-      overview: safeOverview,
-      medicines: safeMedicines,
-      lab_results: safeLabResultsFull,
-      followup: safeFollowup,
-      summary: safeSummary,
-      keyPoints: safeKeyPoints,
-      recommendations: safeRecommendations,
       aiPowered,
-      ...(aiWarning ? { aiWarning } : {}),
+      language: outputLanguage,
     };
 
     res.json(finalResult);
@@ -2147,42 +2101,49 @@ function detectDocumentType(text) {
 /**
  * Analyze medical document using Gemini
  */
-async function analyzeMedicalDocumentWithGemini(extractedText, documentType, inputType) {
+async function analyzeMedicalDocumentWithGemini(extractedText, documentType, inputType, outputLanguage = 'english') {
   // Truncate to ~6000 chars to stay within Gemini input token limits while preserving detail
   const safeText = String(extractedText || '').slice(0, 6000);
+  const lang = ['english', 'hindi', 'gujarati'].includes(String(outputLanguage || '').toLowerCase())
+    ? String(outputLanguage).toLowerCase()
+    : 'english';
+  const langLabel = lang === 'gujarati' ? 'Gujarati' : lang === 'hindi' ? 'Hindi' : 'English';
 
-  const systemPrompt = `You are a medical document OCR reader and analyzer. You receive extracted text from medical documents and return structured JSON analysis.
+  const systemPrompt = `You are a senior clinical assistant that reads OCR text from medical documents and returns patient-friendly structured analysis.
 
 CRITICAL RULES:
 1. Return ONLY valid JSON - no markdown, no backticks, no text outside JSON
-2. Never skip any field - use "Not mentioned" for missing data, [] for empty arrays
-3. Never invent data not present in the document
-4. For medicines, provide detailed side effects (min 4-5), timing with meal references, what to avoid
-5. For lab results, explain what values mean and what to do
-6. All lifestyle, emergency_signs, findings must be arrays of icon-prefixed points
-7. summary.overview_points must be array of 8-10 single-line points with icons`;
+2. Never invent data not present in the document
+3. If data is missing, use "Not mentioned" or []
+4. DO NOT output generic lines like "document analyzed" or "please review"
+5. Summary must mention concrete entities from OCR text (medicine/test/diagnosis/date)
+6. Keep language simple and practical for patient understanding
+7. Patient-facing fields must be in ${langLabel}: summary, keyPoints, recommendations, detailedInstructions, followup.next_visit, followup.repeat_tests, followup.emergency_signs
+8. Do not translate proper nouns (person names, clinic names, medicine names, test names)`;
 
-  const userPrompt = `Analyze this ${documentType} document and return the exact JSON structure specified.
+  const userPrompt = `Analyze this ${documentType} document and return this exact JSON shape.
 
 EXTRACTED TEXT:
 ${safeText}
 
-Return a comprehensive JSON object with these exact fields:
+Return JSON with these exact fields:
 - status: "success"
 - input_type: "${inputType}"
 - document_type: "${documentType}"
-- ocr_extracted_text: "(include first 500 chars of extracted text here)"
+- ocr_extracted_text: "(first 500 chars from extracted text)"
 - overview: {hospital_or_lab, doctor_name, patient_name, patient_age, date, diagnosis}
-- medicines: [] (array of detailed medicine objects with name, generic_name, what_it_does, dosage, frequency, timing array, take_with, duration, side_effects array, what_to_avoid array, important_tip)
-- lab_results: [] (array with test_name, your_value, normal_range, status, status_emoji, what_it_means array, what_to_do array)
-- radiology_findings: {scan_type, findings array, impression, what_to_do array}
-- alerts: [] (array with level, emoji, title, description, action)
-- lifestyle: {diet array, exercise array, hydration array, sleep array, avoid array}
-- followup: {next_visit, repeat_tests array, emergency_signs array (min 5)}
-- summary: {overview_points array (8-10 points)}
+- summary: "2-4 sentence specific medical summary based on OCR text"
+- keyPoints: [5-8 concise bullet-style findings with medical specifics]
+- recommendations: [4-8 action steps tailored to this report]
+- detailedInstructions: "Step 1: ... Step 2: ... Step 3: ..." (4-6 practical steps)
+- medicines: [] (each item: name, dosage, frequency, duration, side_effects[], what_to_avoid[])
+- lab_results: [] (each item: test_name, your_value, normal_range, status, what_it_means[], what_to_do[])
+- followup: {next_visit, repeat_tests[], emergency_signs[]}
 - disclaimer: "⚕️ This analysis is AI-generated for informational purposes only. Always consult your doctor or pharmacist before making any medical decisions."
 
-Remember: Use emojis, make it patient-friendly, arrays for all lists, never paragraphs.`;
+Output language for patient-facing fields: ${langLabel}
+
+Return JSON only.`;
 
   const aiResponse = await generateJsonWithGemini(`${systemPrompt}\n\n${userPrompt}`);
   return aiResponse;

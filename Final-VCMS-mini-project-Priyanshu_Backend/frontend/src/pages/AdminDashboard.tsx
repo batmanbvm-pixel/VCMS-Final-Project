@@ -64,6 +64,7 @@ interface AdminReviewItem {
 }
 
 const COLORS = ["#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6"];
+const TABLE_PAGE_SIZE = 10;
 
 const AdminDashboard = () => {
   const { user, isAuthenticated } = useAuth();
@@ -94,6 +95,7 @@ const AdminDashboard = () => {
   });
   const [appointmentData, setAppointmentData] = useState<any[]>([]);
   const [allAppointments, setAllAppointments] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [userData, setUserData] = useState<any[]>([]);
   const [todayAppointments, setTodayAppointments] = useState<any[]>([]);
   const [recentContacts, setRecentContacts] = useState<any[]>([]);
@@ -103,7 +105,9 @@ const AdminDashboard = () => {
   const [doctorDemand, setDoctorDemand] = useState<DoctorDemandData | null>(null);
   const [doctorAvailability, setDoctorAvailability] = useState<Record<string, boolean>>({});
   const [doctorFilter, setDoctorFilter] = useState<"highest-appointments" | "highest-cancellation" | "lowest-cancellation">("highest-appointments");
-  const [patientFilter, setPatientFilter] = useState<"highest-feedback" | "highest-rating" | "high-demand" | "normal-demand">("highest-feedback");
+  const [patientFilter, setPatientFilter] = useState<"all" | "positive" | "normal" | "negative">("all");
+  const [doctorPage, setDoctorPage] = useState(1);
+  const [patientPage, setPatientPage] = useState(1);
   const [performanceView, setPerformanceView] = useState<"doctor" | "patient">("doctor");
   const [recentReviews, setRecentReviews] = useState<AdminReviewItem[]>([]);
   const [reviewSummary, setReviewSummary] = useState({ totalReviews: 0, averageRating: 0 });
@@ -143,7 +147,7 @@ const AdminDashboard = () => {
         safeGet('/admin/dashboard-stats'),
         safeGet('/admin/appointments?limit=5000&page=1'),
         safeGet('/contact/'),
-        safeGet('/public/reviews/admin/recent?limit=6'),
+        safeGet('/admin/reviews?limit=1000&page=1'),
         safeGet('/admin/users?limit=1000'),
         safeGet('/admin/users?limit=1'),
         safeGet('/admin/users?role=doctor&limit=1'),
@@ -274,6 +278,7 @@ const AdminDashboard = () => {
 
       setAppointmentData(appointmentChartData);
       setAllAppointments(appointments);
+      setAllUsers(usersList);
       setUserData(userChartData);
       setTodayAppointments(todayAppts);
       setRecentContacts(Array.isArray(contacts) ? contacts.slice(0, 3) : []);
@@ -323,14 +328,32 @@ const AdminDashboard = () => {
     }
   }, [retryCount, toast]);
 
-  const filteredDoctors = (doctorDemand?.topDoctors || [])
-    .filter(
-      (d) =>
-        d.doctorName &&
-        !d.doctorName.toLowerCase().includes('unknown') &&
-        !d.doctorName.toLowerCase().includes('(deleted)') &&
-        d.doctorId
-    )
+  const doctorRows = (Array.isArray(allUsers) ? allUsers : [])
+    .filter((u: any) => String(u.role || '').toLowerCase() === 'doctor' && !u.isDeleted)
+    .map((doctor: any) => {
+      const doctorId = String(doctor._id || '');
+      const doctorAppointments = Array.isArray(allAppointments)
+        ? allAppointments.filter((a: any) => {
+            const appointmentDoctorId = typeof a.doctorId === 'string' ? a.doctorId : (a.doctorId?._id || '');
+            return String(appointmentDoctorId) === doctorId;
+          })
+        : [];
+      const appointmentCount = doctorAppointments.length;
+      const completedCount = doctorAppointments.filter((a: any) => String(a.status || '').toLowerCase() === 'completed').length;
+      const cancelledCount = doctorAppointments.filter((a: any) => String(a.status || '').toLowerCase() === 'cancelled').length;
+      const cancellationRate = appointmentCount > 0 ? Math.round((cancelledCount / appointmentCount) * 100) : 0;
+
+      return {
+        doctorId,
+        doctorName: doctor.name || 'Unknown',
+        specialization: doctor.specialization || 'General',
+        appointmentCount,
+        completedCount,
+        cancellationRate,
+        available: doctorAvailability[doctorId] ?? false,
+      };
+    })
+    .filter((d) => d.doctorName && !d.doctorName.toLowerCase().includes('unknown') && !d.doctorName.toLowerCase().includes('(deleted)') && d.doctorId)
     .slice()
     .sort((a, b) => {
       if (doctorFilter === "highest-cancellation") return b.cancellationRate - a.cancellationRate;
@@ -338,35 +361,41 @@ const AdminDashboard = () => {
       return b.appointmentCount - a.appointmentCount;
     });
 
-  const patientDemandRows = Object.values(
-    recentReviews
-      .filter((r) => r.patientName && !r.patientName.toLowerCase().includes('unknown'))
-      .reduce((acc, r) => {
-        const key = r.patientName;
-        // Extract patient ID - handle both string and object formats
-        const patientIdValue = typeof r.patientId === 'string' ? r.patientId : (r.patientId?._id || "");
-        if (!acc[key]) {
-          acc[key] = { patientId: patientIdValue, patientName: key, totalFeedback: 0, averageRating: 0, totalRating: 0 };
-        }
-        if (!acc[key].patientId && patientIdValue) acc[key].patientId = patientIdValue;
-        acc[key].totalFeedback += 1;
-        acc[key].totalRating += Number(r.rating || 0);
-        acc[key].averageRating = acc[key].totalRating / acc[key].totalFeedback;
-        return acc;
-      }, {} as Record<string, { patientId: string; patientName: string; totalFeedback: number; averageRating: number; totalRating: number }>)
-  ).sort((a, b) => b.totalFeedback - a.totalFeedback);
+  const filteredDoctors = doctorRows;
+  const doctorTotalPages = Math.max(1, Math.ceil(filteredDoctors.length / TABLE_PAGE_SIZE));
+  const paginatedDoctors = filteredDoctors.slice((doctorPage - 1) * TABLE_PAGE_SIZE, doctorPage * TABLE_PAGE_SIZE);
 
-  const filteredPatients = patientDemandRows
-    .filter((p) => {
-      if (patientFilter === "high-demand") return p.totalFeedback >= 2;
-      if (patientFilter === "normal-demand") return p.totalFeedback < 2;
+  const patientReviewRows = recentReviews
+    .filter((r) => r.patientName && !r.patientName.toLowerCase().includes('unknown'))
+    .slice()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const filteredPatients = patientReviewRows
+    .filter((r) => {
+      const rating = Number(r.rating || 0);
+      if (patientFilter === "all") return true;
+      if (patientFilter === "positive") return rating >= 4;
+      if (patientFilter === "normal") return rating >= 2.5 && rating < 4;
+      if (patientFilter === "negative") return rating < 2.5;
       return true;
     })
     .slice()
     .sort((a, b) => {
-      if (patientFilter === "highest-rating") return b.averageRating - a.averageRating;
-      return b.totalFeedback - a.totalFeedback;
+      if (patientFilter === "negative") return Number(a.rating || 0) - Number(b.rating || 0);
+      if (patientFilter === "positive") return Number(b.rating || 0) - Number(a.rating || 0);
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
+
+  const patientTotalPages = Math.max(1, Math.ceil(filteredPatients.length / TABLE_PAGE_SIZE));
+  const paginatedPatients = filteredPatients.slice((patientPage - 1) * TABLE_PAGE_SIZE, patientPage * TABLE_PAGE_SIZE);
+
+  useEffect(() => {
+    setDoctorPage(1);
+  }, [doctorFilter, performanceView]);
+
+  useEffect(() => {
+    setPatientPage(1);
+  }, [patientFilter, performanceView]);
 
   const openWarningDialog = (userId: string, userName: string, userRole: "doctor" | "patient") => {
     setWarningDialog({
@@ -1032,7 +1061,7 @@ const AdminDashboard = () => {
                 <div className="p-2 bg-sky-100 rounded-lg">
                   <Stethoscope className="h-6 w-6 text-sky-600" />
                 </div>
-                {performanceView === "doctor" ? "Doctor Performance Analytics" : "Patient Demand & Feedback Analytics"}
+                {performanceView === "doctor" ? "Doctor Performance Analytics" : "Patient Feedback Analytics"}
               </CardTitle>
               <div className="flex gap-2 flex-wrap">
                 <Button size="sm" variant={performanceView === "doctor" ? "default" : "outline"} className={performanceView === "doctor" ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"} onClick={() => setPerformanceView("doctor")}>Doctor View</Button>
@@ -1051,24 +1080,24 @@ const AdminDashboard = () => {
                 {performanceView === "patient" && (
                   <select
                     value={patientFilter}
-                    onChange={(e) => setPatientFilter(e.target.value as "highest-feedback" | "highest-rating" | "high-demand" | "normal-demand")}
+                    onChange={(e) => setPatientFilter(e.target.value as "all" | "positive" | "normal" | "negative")}
                     className="h-9 rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold"
                   >
-                    <option value="highest-feedback">Highest Feedback</option>
-                    <option value="highest-rating">Highest Rating</option>
-                    <option value="high-demand">High Demand</option>
-                    <option value="normal-demand">Normal Demand</option>
+                    <option value="all">All</option>
+                    <option value="positive">Positive Feedback</option>
+                    <option value="normal">Normal Feedback</option>
+                    <option value="negative">Negative Feedback</option>
                   </select>
                 )}
                 {((performanceView === "doctor" && doctorFilter !== "highest-appointments") ||
-                  (performanceView === "patient" && patientFilter !== "highest-feedback")) && (
+                  (performanceView === "patient" && patientFilter !== "all")) && (
                   <Button
                     size="sm"
                     variant="outline"
                     className="text-red-700 border-red-300 bg-red-50 hover:bg-red-100"
                     onClick={() => {
                       if (performanceView === "doctor") setDoctorFilter("highest-appointments");
-                      if (performanceView === "patient") setPatientFilter("highest-feedback");
+                      if (performanceView === "patient") setPatientFilter("all");
                     }}
                   >
                     Clear Filter
@@ -1093,7 +1122,7 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDoctors.map((doctor) => {
+                  {paginatedDoctors.map((doctor) => {
                     const cancelledCount = Math.max(doctor.appointmentCount - doctor.completedCount, 0);
                     const statusTone = doctor.cancellationRate === 0
                       ? "bg-green-100 text-green-700 border-green-300 font-semibold"
@@ -1161,24 +1190,57 @@ const AdminDashboard = () => {
                   })}
                 </tbody>
               </table>
+              {filteredDoctors.length > TABLE_PAGE_SIZE && (
+                <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+                  <p className="text-sm text-slate-600">
+                    Showing {(doctorPage - 1) * TABLE_PAGE_SIZE + 1}-{Math.min(doctorPage * TABLE_PAGE_SIZE, filteredDoctors.length)} of {filteredDoctors.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={doctorPage === 1}
+                      onClick={() => setDoctorPage((p) => Math.max(p - 1, 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={doctorPage >= doctorTotalPages}
+                      onClick={() => setDoctorPage((p) => Math.min(p + 1, doctorTotalPages))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
             ) : (
               <div className="overflow-auto rounded-xl border border-slate-200 bg-white">
-                <table className="w-full min-w-[1020px]">
-                  <caption className="sr-only">Patient demand table with feedback count and average ratings.</caption>
+                <table className="w-full min-w-[1120px]">
+                  <caption className="sr-only">Patient feedback table with individual review rows.</caption>
                   <thead>
                     <tr className="sticky top-0 z-10 border-b-2 border-slate-300 bg-gradient-to-r from-slate-100 to-slate-50">
                       <th scope="col" className="text-left py-4 px-4 text-sm font-bold text-slate-800">Patient</th>
-                      <th scope="col" className="text-center py-4 px-4 text-sm font-bold text-slate-800">Total Feedback</th>
-                      <th scope="col" className="text-center py-4 px-4 text-sm font-bold text-slate-800">Average Rating</th>
-                      <th scope="col" className="text-center py-4 px-4 text-sm font-bold text-slate-800">Rating Stars</th>
-                      <th scope="col" className="text-center py-4 px-4 text-sm font-bold text-slate-800">Demand Status</th>
+                      <th scope="col" className="text-left py-4 px-4 text-sm font-bold text-slate-800">Doctor</th>
+                      <th scope="col" className="text-center py-4 px-4 text-sm font-bold text-slate-800">Rating</th>
+                      <th scope="col" className="text-center py-4 px-4 text-sm font-bold text-slate-800">Feedback Type</th>
+                      <th scope="col" className="text-center py-4 px-4 text-sm font-bold text-slate-800">Date</th>
                       <th scope="col" className="text-center py-4 px-4 text-sm font-bold text-slate-800">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredPatients.map((p) => (
-                      <tr key={p.patientName} className="border-b border-slate-100 hover:bg-sky-50/80 transition-all duration-300 hover:shadow-sm">
+                    {paginatedPatients.map((p) => {
+                      const feedbackType = Number(p.rating || 0) >= 4 ? 'Positive' : Number(p.rating || 0) >= 2.5 ? 'Normal' : 'Negative';
+                      const feedbackTone = Number(p.rating || 0) >= 4
+                        ? 'bg-green-100 text-green-700 border-green-300 font-semibold'
+                        : Number(p.rating || 0) >= 2.5
+                          ? 'bg-slate-100 text-slate-700 border-slate-300 font-semibold'
+                          : 'bg-red-100 text-red-700 border-red-300 font-semibold';
+
+                      return (
+                      <tr key={p._id} className="border-b border-slate-100 hover:bg-sky-50/80 transition-all duration-300 hover:shadow-sm">
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-2">
                             <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold bg-gradient-to-br from-cyan-400 to-cyan-600">
@@ -1189,21 +1251,20 @@ const AdminDashboard = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-4 text-center"><div className="text-xl font-bold text-sky-600">{p.totalFeedback}</div></td>
                         <td className="py-4 px-4 text-center">
-                          <div className="text-xl font-bold text-sky-600">{p.averageRating.toFixed(1)}</div>
+                          <div className="font-semibold text-slate-900">{p.doctorName}</div>
+                          <div className="text-xs text-slate-500">{p.doctorSpecialization}</div>
                         </td>
                         <td className="py-4 px-4 text-center">
-                          <div className="flex items-center justify-center gap-0.5">
-                            {Array.from({ length: 5 }, (_, i) => (
-                              <Star key={i} className={`w-4 h-4 ${i < Math.round(p.averageRating) ? 'text-yellow-500 fill-yellow-500' : 'text-slate-300'}`} />
-                            ))}
-                          </div>
+                          <div className="text-xl font-bold text-sky-600">{Number(p.rating || 0).toFixed(0)}/5</div>
                         </td>
                         <td className="py-4 px-4 text-center">
-                          <Badge className={p.totalFeedback >= 2 ? "bg-sky-100 text-sky-700 border-sky-300 font-semibold" : "bg-slate-100 text-slate-700 border-slate-300 font-semibold"}>
-                            {p.totalFeedback >= 2 ? "High" : "Normal"}
+                          <Badge className={feedbackTone}>
+                            {feedbackType}
                           </Badge>
+                        </td>
+                        <td className="py-4 px-4 text-center text-sm text-slate-600">
+                          {new Date(p.createdAt).toLocaleDateString()}
                         </td>
                         <td className="py-4 px-4">
                           <div className="flex items-center justify-center gap-2">
@@ -1228,14 +1289,40 @@ const AdminDashboard = () => {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                     {filteredPatients.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="py-10 text-center text-slate-500">No patient demand data available.</td>
+                        <td colSpan={6} className="py-10 text-center text-slate-500">No patient feedback data available.</td>
                       </tr>
                     )}
                   </tbody>
                 </table>
+                {filteredPatients.length > TABLE_PAGE_SIZE && (
+                  <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+                    <p className="text-sm text-slate-600">
+                      Showing {(patientPage - 1) * TABLE_PAGE_SIZE + 1}-{Math.min(patientPage * TABLE_PAGE_SIZE, filteredPatients.length)} of {filteredPatients.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={patientPage === 1}
+                        onClick={() => setPatientPage((p) => Math.max(p - 1, 1))}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={patientPage >= patientTotalPages}
+                        onClick={() => setPatientPage((p) => Math.min(p + 1, patientTotalPages))}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
@@ -1266,26 +1353,26 @@ const AdminDashboard = () => {
               </div>
             ) : (
               <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-200">
-                <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
-                  <div className="text-sm text-cyan-700 font-medium">High Demand Patients</div>
-                  <div className="text-2xl font-bold text-cyan-600 mt-1">
-                    {filteredPatients.filter((p) => p.totalFeedback >= 2).length}
-                  </div>
-                  <div className="text-xs text-cyan-600 mt-1">Feedback count ≥ 2 (filtered)</div>
-                </div>
-                <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
-                  <div className="text-sm text-amber-700 font-medium">Top Rated Patients</div>
-                  <div className="text-2xl font-bold text-amber-600 mt-1">
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="text-sm text-green-700 font-medium">Positive Feedback Patients</div>
+                  <div className="text-2xl font-bold text-green-600 mt-1">
                     {filteredPatients.filter((p) => p.averageRating >= 4).length}
                   </div>
-                  <div className="text-xs text-amber-600 mt-1">Average rating ≥ 4.0</div>
+                  <div className="text-xs text-green-600 mt-1">Average score ≥ 4.0</div>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                  <div className="text-sm text-slate-700 font-medium">Normal Demand Patients</div>
+                  <div className="text-sm text-slate-700 font-medium">Normal Feedback Patients</div>
                   <div className="text-2xl font-bold text-slate-700 mt-1">
-                    {filteredPatients.filter((p) => p.totalFeedback < 2).length}
+                    {filteredPatients.filter((p) => p.averageRating >= 2.5 && p.averageRating < 4).length}
                   </div>
-                  <div className="text-xs text-slate-600 mt-1">Feedback count &lt; 2</div>
+                  <div className="text-xs text-slate-600 mt-1">Average score 2.5 - 3.9</div>
+                </div>
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <div className="text-sm text-red-700 font-medium">Negative Feedback Patients</div>
+                  <div className="text-2xl font-bold text-red-600 mt-1">
+                    {filteredPatients.filter((p) => p.averageRating < 2.5).length}
+                  </div>
+                  <div className="text-xs text-red-600 mt-1">Average score below 2.5</div>
                 </div>
               </div>
             )}

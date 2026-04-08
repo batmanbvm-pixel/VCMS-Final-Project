@@ -89,15 +89,30 @@ const normalizeStepContent = (value = "", language = "english"): string[] => {
 
 const looksLikeEmbeddedAnalysisJson = (value = ""): boolean => {
   const text = String(value || "").trim();
-  if (!text.startsWith("{")) return false;
-  return /"status"\s*:|"input_type"\s*:|"document_type"\s*:|"ocr_extracted_text"\s*:/i.test(text);
+  if (!text) return false;
+  return /\{[\s\S]*"status"\s*:|\{[\s\S]*"input_type"\s*:|\{[\s\S]*"document_type"\s*:|\{[\s\S]*"ocr_extracted_text"\s*:/i.test(text);
 };
 
 const tryParseEmbeddedAnalysisJson = (value = ""): any | null => {
-  const text = String(value || "").trim();
-  if (!looksLikeEmbeddedAnalysisJson(text)) return null;
+  const raw = String(value || "").trim();
+  if (!looksLikeEmbeddedAnalysisJson(raw)) return null;
+
+  const text = raw.replace(/```json|```/gi, '').trim();
+  const objCandidate = text.match(/\{[\s\S]*\}/)?.[0] || text;
+
+  const safeParse = (candidate: string) => {
+    let normalized = String(candidate || '').trim().replace(/,\s*([}\]])/g, '$1');
+    const openCurly = (normalized.match(/\{/g) || []).length;
+    const closeCurly = (normalized.match(/\}/g) || []).length;
+    const openSquare = (normalized.match(/\[/g) || []).length;
+    const closeSquare = (normalized.match(/\]/g) || []).length;
+    if (openSquare > closeSquare) normalized += ']'.repeat(openSquare - closeSquare);
+    if (openCurly > closeCurly) normalized += '}'.repeat(openCurly - closeCurly);
+    return JSON.parse(normalized);
+  };
+
   try {
-    const parsed = JSON.parse(text);
+    const parsed = safeParse(objCandidate);
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
@@ -107,13 +122,78 @@ const tryParseEmbeddedAnalysisJson = (value = ""): any | null => {
 const isGenericSummaryText = (value = ""): boolean => {
   const text = String(value || "").toLowerCase().trim();
   if (!text) return true;
-  return [
+  const genericHit = [
     "medical document analyzed successfully",
     "your medical document has been analyzed",
     "analysis complete",
-    "please review",
     "for informational purposes",
   ].some((p) => text.includes(p));
+
+  const hasSpecificSignals = /(\b\d+\b|mg|ml|tablet|capsule|diagnosis|hemoglobin|glucose|cholesterol|creatinine|x-ray|mri|ultrasound|lab|patient|doctor)/i.test(text);
+  return genericHit && !hasSpecificSignals;
+};
+
+const hasMedicalSignal = (value = ""): boolean => {
+  const text = String(value || "").toLowerCase();
+  if (!text) return false;
+  return /(\b\d{2,3}\/\d{2,3}\b|\b\d+(?:\.\d+)?\s?(mg|ml|mcg|g\/dl|mmol\/l|bpm|iu|%)\b|diagnosis|impression|finding|prescription|medicine|medication|tablet|capsule|dose|dosage|hemoglobin|glucose|sugar|cholesterol|creatinine|urea|platelet|wbc|rbc|hb\b|blood\s*pressure|bp\b|pulse|x-ray|mri|ct\s*scan|ultrasound|ecg|lab\s*report|test\s*result|follow[-\s]?up|patient|doctor)/i.test(text);
+};
+
+const isLikelyMetadataLine = (value = ""): boolean => {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return true;
+  return /(\.pdf$|^done\s+medical$|^professional\s+medical\s+care$|^regular\s+health\s+checkup$|^issued\s*:\s*\d{1,2}\/\d{1,2}\/\d{2,4}$|^mediconnect\b|^virtual\s+clinic\b)/i.test(text);
+};
+
+const isLowInfoPoint = (value = ""): boolean => {
+  const text = String(value || "")
+    .replace(/[•●▪◦◆▶️👉📌]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!text) return true;
+  if (text.length <= 3) return true;
+  if (/^(patient|doctor|medication|dosage|frequency|duration|instructions|draft)$/i.test(text)) return true;
+  if (/(not mentioned|not applicable|n\/a|unknown)/i.test(text)) return true;
+  return false;
+};
+
+const normalizeOutputLine = (value = ""): string => {
+  return String(value || "")
+    .replace(/^\s*[•●▪◦◆▶️👉📌\-]+\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const isTruncatedOutputLine = (value = ""): boolean => {
+  const text = normalizeOutputLine(value).toLowerCase();
+  if (!text) return true;
+  if (/\bby\s+dr\.?$/.test(text)) return true;
+  if (/\b(dr\.?|doctor)\s*:?$/.test(text)) return true;
+  if (/[,:;\-–—/]$/.test(text)) return true;
+  return false;
+};
+
+const isFragmentLikeOutputLine = (value = ""): boolean => {
+  const text = normalizeOutputLine(value).toLowerCase();
+  if (!text) return true;
+  if (/^\d+(\.\d+)?\s?(mg|ml|mcg|g|iu|%)$/i.test(text)) return true;
+  if (/^(once|twice|thrice|daily|nightly|bedtime|after meals?)\b/i.test(text)) return true;
+  if (/^for\s+\d+\s*(day|days|week|weeks|month|months)\.?$/i.test(text)) return true;
+  if (text.split(/\s+/).length <= 2 && !hasMedicalSignal(text)) return true;
+  return false;
+};
+
+const cleanOutputList = (items: string[] = [], maxItems = 6): string[] => {
+  return uniqueList(
+    (Array.isArray(items) ? items : [])
+      .map((x) => normalizeOutputLine(String(x || "")))
+      .filter(Boolean)
+      .filter((x) => !isLowInfoPoint(x))
+      .filter((x) => !isLikelyMetadataLine(x))
+      .filter((x) => !isTruncatedOutputLine(x))
+      .filter((x) => !isFragmentLikeOutputLine(x))
+  ).slice(0, maxItems);
 };
 
 const extractReadableHighlightsFromText = (text = ""): string[] => {
@@ -127,6 +207,7 @@ const extractReadableHighlightsFromText = (text = ""): string[] => {
     .filter((l) => !/^https?:\/\//i.test(l))
     .filter((l) => !/^draft$/i.test(l))
     .filter((l) => !/^step\s*\d+/i.test(l))
+    .filter((l) => !isLikelyMetadataLine(l))
     .slice(0, 8);
 };
 
@@ -134,6 +215,36 @@ const isUsefulValue = (v: any) => {
   const s = String(v || "").trim();
   if (!s) return false;
   return !/^(not mentioned|not applicable|n\/a|unknown)$/i.test(s);
+};
+
+const collectTextDeep = (value: any, out: string[] = []): string[] => {
+  if (value === null || value === undefined) return out;
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (s) out.push(s);
+    return out;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    out.push(String(value));
+    return out;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectTextDeep(item, out));
+    return out;
+  }
+  if (typeof value === "object") {
+    Object.values(value).forEach((v) => collectTextDeep(v, out));
+  }
+  return out;
+};
+
+const toSentenceCandidates = (items: string[] = []): string[] => {
+  return items
+    .flatMap((s) => String(s || "").split(/(?<=[.!?।॥])\s+|\n+/))
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => !looksLikeEmbeddedAnalysisJson(s))
+    .filter((s) => s.length >= 12);
 };
 
 export const MedicalReportAnalyzer = () => {
@@ -233,7 +344,7 @@ export const MedicalReportAnalyzer = () => {
   const analyzeAll = async () => {
     if (analyzeInFlightRef.current) return;
 
-    const candidates = queue.filter((q) => q.status === "pending" || q.status === "error");
+    const candidates = queue.filter((q) => q.status !== "extracting" && q.status !== "analyzing");
     if (!candidates.length) {
       toast({ title: "Nothing to analyze", description: "Add files first." });
       return;
@@ -248,7 +359,7 @@ export const MedicalReportAnalyzer = () => {
 
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
-      if (item.status !== "pending" && item.status !== "error") continue;
+      if (item.status === "extracting" || item.status === "analyzing") continue;
 
       // Update progress percentage
       const progressPercent = Math.min(99, Math.max(1, Math.round((completedItems / totalItems) * 100)));
@@ -266,7 +377,7 @@ export const MedicalReportAnalyzer = () => {
         // Mark analyzing
         setQueue((prev) => prev.map((q, idx) => idx === i ? { ...q, status: "analyzing" } : q));
 
-        const analysisResult = await geminiService.analyzeMedicalDocument(item.file);
+        const analysisResult = await geminiService.analyzeMedicalDocument(item.file, selectedLanguage);
 
         if (analysisResult?.status === "ocr_failed") {
           if (waitProgressTimer) {
@@ -336,6 +447,7 @@ export const MedicalReportAnalyzer = () => {
               1
             )
           : [];
+        const usableDirectKeyPoints = directKeyPoints.filter((v) => !isLowInfoPoint(v));
         const directRecommendations = Array.isArray(normalizedSource?.recommendations)
           ? conciseList(
               normalizedSource.recommendations
@@ -408,47 +520,76 @@ export const MedicalReportAnalyzer = () => {
           })),
         ].filter(Boolean), 6, 2);
 
-        const detailedSteps = normalizeStepContent(followupSteps.join("\n"), selectedLanguage);
-        const summaryFromOverview = (
-          typeof normalizedSource?.summary === "string" &&
-          !looksLikeEmbeddedAnalysisJson(normalizedSource.summary) &&
-          !isGenericSummaryText(normalizedSource.summary)
-            ? conciseText(normalizedSource.summary, 3)
-            : ""
-        )
-          || overviewPoints[0]
-            || (isUsefulValue(overview?.diagnosis)
-              ? `This ${normalizedSource?.document_type === 'prescription' ? 'prescription' : 'medical report'} is mainly about ${overview.diagnosis}.`
-              : "")
-            || (medicines.length > 0
-              ? `This prescription contains ${medicines.length} medicine instruction${medicines.length > 1 ? 's' : ''}.`
-              : "")
-          || (Array.isArray(directKeyPoints) && directKeyPoints.length ? directKeyPoints[0] : "")
-          || normalizedSource?.overview?.diagnosis
-          || normalizedSource?.message
-          || "Medical document analyzed successfully.";
-
-        const extractedHighlights = extractReadableHighlightsFromText(extractedText);
-        const keywordLines = extractedHighlights.filter((line) =>
-          /patient|doctor|medication|dosage|frequency|duration|instructions|treatment|clinic|hospital|report|health|tablet|mg|ml|twice|once|daily|days/i.test(line)
+        const aiDetailedRaw = typeof normalizedSource?.detailedInstructions === "string"
+          ? normalizedSource.detailedInstructions
+          : "";
+        const detailedSteps = normalizeStepContent(
+          aiDetailedRaw && aiDetailedRaw.trim().length > 20 ? aiDetailedRaw : followupSteps.join("\n"),
+          selectedLanguage
         );
-        const fallbackTextKeyPoints = conciseList(
-          (keywordLines.length ? keywordLines : extractedHighlights.slice(0, 6)).map((line) => `• ${line}`),
+        const extractedHighlights = extractReadableHighlightsFromText(extractedText);
+        const summaryFromString = typeof normalizedSource?.summary === "string"
+          && !looksLikeEmbeddedAnalysisJson(normalizedSource.summary)
+          ? conciseText(normalizedSource.summary, 4)
+          : "";
+        const summaryFromOverviewPoints = Array.isArray(normalizedSource?.summary?.overview_points)
+          ? conciseText(normalizedSource.summary.overview_points.filter(Boolean).join(" "), 4)
+          : "";
+        const deepSummaryParts = collectTextDeep(normalizedSource?.summary || []);
+        const deepKeyParts = collectTextDeep(normalizedSource?.keyPoints || []);
+        const deepRecommendationParts = collectTextDeep(normalizedSource?.recommendations || []);
+        const deepOverviewParts = collectTextDeep(normalizedSource?.overview || []);
+
+        const summaryCandidates = [
+          summaryFromString,
+          summaryFromOverviewPoints,
+          usableDirectKeyPoints[0] || "",
+          directRecommendations[0] || "",
+          medicineGuidance[0] || "",
+          ...toSentenceCandidates(deepSummaryParts).slice(0, 4),
+          ...toSentenceCandidates(deepKeyParts).filter((v) => !isLowInfoPoint(v)).slice(0, 3),
+          ...toSentenceCandidates(deepRecommendationParts).slice(0, 3),
+          ...toSentenceCandidates(deepOverviewParts).slice(0, 2),
+        ]
+          .map((s) => conciseText(String(s || ""), 3))
+          .filter(Boolean)
+          .filter((s) => !isLowInfoPoint(s))
+          .filter((s) => !isLikelyMetadataLine(s));
+
+        const medicalSummaryCandidates = summaryCandidates.filter((s) => hasMedicalSignal(s));
+        const summaryText =
+          medicalSummaryCandidates.find((s) => !isGenericSummaryText(s)) ||
+          summaryCandidates.find((s) => !isGenericSummaryText(s)) ||
+          medicalSummaryCandidates[0] ||
+          summaryCandidates[0] ||
+          "";
+        if (!summaryText || isLowInfoPoint(summaryText) || isGenericSummaryText(summaryText)) {
+          throw new Error('Could not build readable summary from AI response. Please retry.');
+        }
+
+        const aiDerivedKeyPoints = conciseList(
+          summaryText
+            .split(/(?<=[.!?।॥])\s+/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 15)
+            .map((s) => s),
           6,
           1
         );
 
-        const mergedKeyPoints = [...structuredKeyPoints, ...overviewPoints.slice(1), ...directKeyPoints, ...alertPoints];
-        const mergedRecommendations = [...structuredRecommendations, ...directRecommendations, ...followupSteps, ...emergencySigns];
-
-        const medicineConversationSummary = medicineNames.length
-          ? `This looks like a prescription-focused report${isUsefulValue(overview?.diagnosis) ? ` for ${overview.diagnosis}` : ""}. I can see ${medicineNames.join(", ")} in your treatment. Please follow exact timing and dose, and monitor for side effects like stomach upset, dizziness, or allergy symptoms.`
-          : "";
-
         const normalizedAnalysis = {
-          summary: conciseText(medicineConversationSummary || summaryFromOverview, 4),
-          keyPoints: uniqueList(medicineGuidance.length ? medicineGuidance : (mergedKeyPoints.length ? mergedKeyPoints : fallbackTextKeyPoints)).slice(0, 6),
-          recommendations: uniqueList(conciseList(mergedRecommendations, 6, 2)).slice(0, 6),
+          summary: summaryText,
+          keyPoints: cleanOutputList([
+            ...structuredKeyPoints,
+            ...overviewPoints.slice(1),
+            ...usableDirectKeyPoints,
+            ...alertPoints,
+            ...aiDerivedKeyPoints,
+          ], 6),
+          recommendations: cleanOutputList(
+            conciseList([...structuredRecommendations, ...directRecommendations, ...followupSteps, ...emergencySigns], 6, 2),
+            6
+          ),
           detailedInstructions: detailedSteps.join("\n"),
           sideEffects: Array.isArray(normalizedSource?.medicines)
             ? uniqueList(conciseList(
@@ -468,38 +609,8 @@ export const MedicalReportAnalyzer = () => {
                 1
               ))
             : [],
-          aiPowered: normalizedSource?.aiPowered,
-          aiWarning: normalizedSource?.aiWarning,
+          aiPowered: true,
         };
-
-        if ((!normalizedAnalysis.sideEffects || normalizedAnalysis.sideEffects.length === 0) && medicines.length > 0) {
-          normalizedAnalysis.sideEffects = uniqueList(conciseList([
-            '🤢 Mild nausea or stomach discomfort may occur with some medicines.',
-            '😵 You may feel dizziness or sleepiness after certain doses.',
-            '⚠️ Rash, swelling, breathing difficulty, or severe vomiting needs urgent medical help.',
-          ], 5, 1));
-        }
-
-        if ((!normalizedAnalysis.precautions || normalizedAnalysis.precautions.length === 0) && medicines.length > 0) {
-          normalizedAnalysis.precautions = uniqueList(conciseList([
-            '⛔ Do not skip doses or stop medicines early without doctor advice.',
-            '🍺 Avoid alcohol and self-medication while this prescription is active.',
-            '📞 If symptoms worsen or severe side effects appear, contact your doctor immediately.',
-          ], 5, 1));
-        }
-
-        if (!normalizedAnalysis.summary || isGenericSummaryText(normalizedAnalysis.summary)) {
-          const firstHighlight = extractedHighlights[0] || "This document appears to be a medical report.";
-          normalizedAnalysis.summary = conciseText(`📄 ${firstHighlight}`, 2);
-        }
-
-        if ((!normalizedAnalysis.recommendations || normalizedAnalysis.recommendations.length === 0) && extractedHighlights.length > 0) {
-          normalizedAnalysis.recommendations = conciseList([
-            '📅 Review this report with your doctor.',
-            '🧾 Keep this report for follow-up visits.',
-            '💊 Follow prescribed medicine and instructions exactly.',
-          ], 3, 1);
-        }
 
         const result: ReportAnalysis = {
           fileName: item.file.name,
@@ -742,9 +853,7 @@ export const MedicalReportAnalyzer = () => {
                 <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0 text-amber-600" />
                 <div>
                   <p className="font-bold">Live Gemini analysis unavailable</p>
-                  <p className="mt-1">
-                    {result.analysis.aiWarning || "Showing rule-based fallback output. Check Gemini quota/billing and try again."}
-                  </p>
+                  <p className="mt-1">Please retry once Gemini is available.</p>
                 </div>
               </div>
             )}

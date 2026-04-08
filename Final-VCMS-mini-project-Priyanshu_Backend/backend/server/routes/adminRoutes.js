@@ -21,6 +21,7 @@ const {
   warnUser,
   deleteUser,
   getAllReviews,
+  deleteReview,
 } = require("../controllers/adminController");
 
 // Apply rate limiter to all admin routes
@@ -77,5 +78,8 @@ router.get("/reports", protect, getReports);
 
 // GET /reviews - Admin: Get all reviews with pagination and filtering
 router.get("/reviews", protect, getAllReviews);
+
+// DELETE /reviews/:reviewId - Admin: Delete review by id
+router.delete("/reviews/:reviewId", protect, deleteReview);
 
 module.exports = router;

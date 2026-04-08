@@ -1004,6 +1004,25 @@ const getAllReviews = async (req, res) => {
   }
 };
 
+// Delete a review by id (admin only)
+const deleteReview = async (req, res) => {
+  try {
+    if (!ensureAdmin(req, res)) return;
+
+    const { reviewId } = req.params;
+    const deleted = await DoctorReview.findByIdAndDelete(reviewId);
+
+    if (!deleted) {
+      return res.status(404).json({ message: 'Review not found' });
+    }
+
+    return res.json({ success: true, message: 'Review deleted successfully', reviewId });
+  } catch (error) {
+    // Error handled
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getUsers,
@@ -1021,4 +1040,5 @@ module.exports = {
   warnUser,
   deleteUser,
   getAllReviews,
+  deleteReview,
 };

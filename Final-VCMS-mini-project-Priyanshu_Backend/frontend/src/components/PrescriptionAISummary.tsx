@@ -47,50 +47,6 @@ const isGenericSummary = (value = "") => {
   ].some((p) => text.includes(p));
 };
 
-const buildPersonalizedPrescriptionFallback = (
-  medications: any[],
-  diagnosis: string,
-  treatmentPlan: string,
-  followUpRecommendations: string,
-  language: string
-) => {
-  const meds = Array.isArray(medications) ? medications.filter(Boolean) : [];
-  const medLines = meds.slice(0, 6).map((m) => {
-    const name = m?.name || 'Medicine';
-    const dosage = m?.dosage ? ` ${m.dosage}` : '';
-    const frequency = m?.frequency ? `, ${m.frequency}` : '';
-    const duration = m?.duration ? ` for ${m.duration}` : '';
-    return `💊 ${name}${dosage}${frequency}${duration}`.trim();
-  });
-
-  const summary = diagnosis
-    ? `This prescription is for ${diagnosis}. ${meds.length ? `It includes ${meds.length} medicine${meds.length > 1 ? 's' : ''} with specific timing and duration.` : 'Please follow your doctor instructions carefully.'}`
-    : `This prescription includes ${meds.length || 'multiple'} medicine instructions. Follow exact dosage and timing for best recovery.`;
-
-  const keyPoints = medLines.length ? medLines : [
-    '💊 Follow exact dosage and timing written in prescription.',
-    '🕒 Do not skip doses or stop medicines early without doctor advice.',
-  ];
-
-  const recommendations = [
-    followUpRecommendations ? `📅 Follow-up: ${followUpRecommendations}` : '📅 Schedule follow-up visit as advised by your doctor.',
-    treatmentPlan ? `🩺 Treatment plan: ${treatmentPlan}` : '🩺 Continue treatment plan exactly as prescribed.',
-    '⚠️ Contact doctor immediately if severe side effects appear.',
-  ].filter(Boolean);
-
-  const detailedInstructions = medLines.length
-    ? medLines.map((line, idx) => `Step ${idx + 1}: ${line.replace(/^💊\s*/, '')}`).join('\n')
-    : 'Step 1: Take medicines exactly as prescribed by your doctor.';
-
-  return {
-    summary,
-    keyPoints,
-    recommendations,
-    detailedInstructions,
-    language,
-  };
-};
-
 const toFriendlySummaryError = (message: string) => {
   const lower = String(message || '').toLowerCase();
 
@@ -141,64 +97,58 @@ const toFriendlySummaryError = (message: string) => {
   };
 };
 
-const extractMedicinesFromSummary = (medications: any[], keyPoints: string[]): MedicineDetail[] => {
+const extractMedicinesFromSummary = (summaryData: SummaryState | null): MedicineDetail[] => {
+  if (!summaryData) return [];
+
   const medicineList: MedicineDetail[] = [];
-  
-  // First try to extract from medications prop directly
-  if (medications && medications.length > 0) {
-    medications.forEach(med => {
-      medicineList.push({
-        name: med.name || 'Medicine',
-        dosage: med.dosage || '',
-        frequency: med.frequency || '',
-        duration: med.duration || '',
-        purpose: '',
-        howToTake: `${med.frequency || ''} ${med.dosage ? `(${med.dosage})` : ''}`.trim(),
-        sideEffects: [],
-        precautions: [],
-        recoveryTime: med.duration || ''
-      });
+  const keyPoints = Array.isArray(summaryData.keyPoints) ? summaryData.keyPoints : [];
+  const detailedText = String(summaryData.detailedInstructions || "");
+
+  const normalizeLine = (value: string) => String(value || "")
+    .replace(/^\s*[•●▪◦◆▶️👉📌-]+\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const linesFromDetails = detailedText
+    .split(/\n+|Step\s*\d+\s*:\s*|चरण\s*\d+\s*:\s*|પગલું\s*\d+\s*:\s*/i)
+    .map(normalizeLine)
+    .filter(Boolean);
+
+  const allLines = [...keyPoints.map(normalizeLine), ...linesFromDetails]
+    .filter((line) => line.length >= 6)
+    .slice(0, 30);
+
+  allLines.forEach((line) => {
+    const hasMedicineIndicators = /\d+\s*(mg|ml|tablet|capsule|dose|daily|twice|thrice|મિ.ગ્રા|ગોળી|વખત|मिलीग्राम|गोली|बार)/i.test(line);
+    if (!hasMedicineIndicators) return;
+
+    const nameMatch = line.match(/^([A-Za-z\u0900-\u097F\u0A80-\u0AFF][A-Za-z\u0900-\u097F\u0A80-\u0AFF\s-]{1,40})/);
+    const name = (nameMatch?.[1] || "Medicine").trim();
+    if (!name || /^medicine$/i.test(name)) return;
+
+    const existing = medicineList.find((m) => m.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      if (!existing.howToTake) existing.howToTake = line;
+      if (!existing.purpose) existing.purpose = line;
+      return;
+    }
+
+    const dosage = (line.match(/\b\d+(?:\.\d+)?\s*(?:mg|ml|mcg|g)\b/i)?.[0] || "").trim();
+    const duration = (line.match(/\b\d+\s*(?:day|days|week|weeks|month|months|દિવસ|અઠવાડિયા|महीने|दिन)\b/i)?.[0] || "").trim();
+
+    medicineList.push({
+      name,
+      dosage,
+      duration,
+      purpose: line,
+      howToTake: line,
+      sideEffects: [],
+      precautions: [],
+      recoveryTime: duration,
     });
-  }
-  
-  // Extract from keyPoints if they contain medicine info (language-agnostic)
-  if (keyPoints && keyPoints.length > 0) {
-    keyPoints.forEach(point => {
-      const lowerPoint = point.toLowerCase();
-      
-      // Check if this keyPoint contains medicine-like info (dosage indicators in any language)
-      const hasMedicineIndicators = /\d+\s*(mg|ml|tablet|capsule|dose|times|daily|twice|thrice|मिलीग्राम|गोली|टैबलेट|बार|દવા|ગોળી|વખત)/i.test(point);
-      
-      if (hasMedicineIndicators) {
-        // Try to extract medicine name (supports Unicode characters for Hindi/Gujarati)
-        const nameMatch = point.match(/^[💊]?\s*([A-Za-z\u0900-\u097F\u0A80-\u0AFF]+(?:\s+[A-Za-z\u0900-\u097F\u0A80-\u0AFF]+)?)\s*(?:\d+|—|•|$)/);
-        const name = nameMatch ? nameMatch[1].trim() : (point.startsWith('💊') ? point.substring(2).split(/[—•|]/)[0].trim() : 'Medicine');
-        
-        // Check if we already have this medicine
-        const existing = medicineList.find(m => m.name.toLowerCase() === name.toLowerCase());
-        if (!existing) {
-          // Parse out different parts from the point
-          const parts = point.split(/[—•|]/).map(p => p.trim()).filter(Boolean);
-          medicineList.push({
-            name,
-            dosage: parts[1] || '',
-            frequency: parts[2] || '',
-            duration: parts[3] || '',
-            purpose: point,
-            howToTake: parts.slice(1).join(' ') || point,
-            sideEffects: [],
-            precautions: [],
-            recoveryTime: parts[3] || ''
-          });
-        } else {
-          // Enhance existing medicine info
-          if (!existing.purpose) existing.purpose = point;
-        }
-      }
-    });
-  }
-  
-  return medicineList;
+  });
+
+  return medicineList.slice(0, 6);
 };
 
 export const PrescriptionAISummary = ({
@@ -217,7 +167,7 @@ export const PrescriptionAISummary = ({
   const friendlyError = summaryError ? toFriendlySummaryError(summaryError) : null;
   
   // Extract detailed medicine info
-  const medicineDetails = summaryData ? extractMedicinesFromSummary(medications, summaryData.keyPoints) : [];
+  const medicineDetails = extractMedicinesFromSummary(summaryData);
 
   const handleGenerateSummary = async () => {
     if (summaryInFlightRef.current) return;
@@ -245,22 +195,14 @@ export const PrescriptionAISummary = ({
       }
 
       const normalizedResult = { ...result };
-      const noUsefulKeyPoints = !Array.isArray(normalizedResult.keyPoints) || normalizedResult.keyPoints.length === 0;
-      const noUsefulRecommendations = !Array.isArray(normalizedResult.recommendations) || normalizedResult.recommendations.length === 0;
-      if (!normalizedResult.summary || isGenericSummary(normalizedResult.summary) || noUsefulKeyPoints || noUsefulRecommendations) {
-        const fallback = buildPersonalizedPrescriptionFallback(
-          medications,
-          diagnosis,
-          treatmentPlan,
-          followUpRecommendations,
-          selectedLanguage
-        );
-        normalizedResult.summary = (!normalizedResult.summary || isGenericSummary(normalizedResult.summary))
-          ? fallback.summary
-          : normalizedResult.summary;
-        normalizedResult.keyPoints = noUsefulKeyPoints ? fallback.keyPoints : normalizedResult.keyPoints;
-        normalizedResult.recommendations = noUsefulRecommendations ? fallback.recommendations : normalizedResult.recommendations;
-        normalizedResult.detailedInstructions = normalizedResult.detailedInstructions || fallback.detailedInstructions;
+      if (!normalizedResult.summary || isGenericSummary(normalizedResult.summary)) {
+        throw new Error('Gemini returned a generic prescription summary. Please retry.');
+      }
+      if (!Array.isArray(normalizedResult.keyPoints) || normalizedResult.keyPoints.length === 0) {
+        throw new Error('Gemini did not return enough prescription details. Please retry.');
+      }
+      if (!Array.isArray(normalizedResult.recommendations) || normalizedResult.recommendations.length === 0) {
+        throw new Error('Gemini did not return prescription recommendations. Please retry.');
       }
 
       setSummaryData({...normalizedResult, language: selectedLanguage});
